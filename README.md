@@ -76,10 +76,29 @@ Outputs a `.app` bundle to `src-tauri/target/release/bundle/macos/`. The bundle 
 
 ## OBS Setup
 
-1. Start the app (`npm run dev` or `npm run tauri dev`)
-2. In OBS, add a **Browser Source**
-3. Set the URL to `http://localhost:5173/#/overlay`
-4. Set width/height to match your canvas (e.g. 1920×1080)
-5. Enable **"Shutdown source when not visible"** and **"Refresh browser when scene becomes active"** for clean transitions
+The app uses two sync mechanisms simultaneously:
+
+| Mechanism | When it works |
+|---|---|
+| BroadcastChannel | Controller + Overlay open in the **same browser** — no relay needed |
+| WebSocket relay | Controller in browser + Overlay in **OBS** (separate process) — requires `relay.js` |
+
+### Browser-only (no OBS)
+
+1. Open your Vercel URL in Chrome/Safari — this is the Controller (`/`)
+2. Open a second tab to `https://your-app.vercel.app/#/overlay`
+3. They sync automatically via BroadcastChannel — no extra steps
+
+### With OBS Browser Source
+
+1. Make sure Node.js is installed (`node --version`)
+2. In the project folder, run:
+   ```bash
+   node relay.js
+   ```
+3. Open your Vercel URL in Chrome/Safari (Controller)
+4. In OBS, add a **Browser Source** pointing to `https://your-app.vercel.app/#/overlay`
+5. Set width/height to match your canvas (e.g. 1920×1080)
+6. Leave `relay.js` running for the duration of your broadcast — Ctrl+C to stop
 
 The overlay background is fully transparent — no chroma key needed.

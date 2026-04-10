@@ -1,24 +1,30 @@
 /**
- * Scoreboard state store with WebSocket relay sync.
+ * Scoreboard state store — dual-sync: BroadcastChannel + optional WebSocket.
  *
- * ARCHITECTURE:
- *   Controller (Chrome/Safari)  ──┐
- *                                  ├── ws://localhost:5199 (relay) ──► OBS Overlay
- *   Any other client               ┘
+ * SYNC STRATEGY:
  *
- * The relay server (started by the Vite plugin) holds the latest state and
- * broadcasts every update to all connected clients. When OBS first loads the
- * overlay it immediately receives the current state so the scorebug is never
- * empty.
+ *   BroadcastChannel  — always active; syncs between any tabs/windows sharing
+ *                       the same browser process.  Covers the common case of
+ *                       Controller and Overlay both open in Chrome/Safari.
+ *
+ *   WebSocket relay   — optional; connects to ws://localhost:5199 when a relay
+ *                       is running.  Required for OBS Browser Source (OBS runs
+ *                       a separate Chromium process that cannot receive
+ *                       BroadcastChannel messages).
+ *                       Start the relay with:  node relay.js
+ *
+ * Every outgoing state change is sent on both channels simultaneously.
+ * Incoming messages are applied silently (no re-broadcast) to avoid loops.
  *
  * CLOCK ARCHITECTURE:
- *   Only the Controller tab runs clock intervals. Every tick is broadcast via
- *   WebSocket so the Overlay never needs its own timers.
+ *   Only the Controller tab runs clock intervals.  Every tick is broadcast
+ *   so the Overlay never needs its own timers.
  */
 
 import { writable, get } from 'svelte/store';
 
 const WS_URL = 'ws://localhost:5199';
+const BC_CHANNEL = 'scoreboard-sync';
 
 // ── Default state ────────────────────────────────────────
 const DEFAULT_STATE = {
@@ -59,12 +65,26 @@ const DEFAULT_STATE = {
 function createScoreboardStore() {
   const { subscribe, set, update } = writable({ ...DEFAULT_STATE });
 
+  // ── BroadcastChannel ────────────────────────────────────
+  let bc = null;
+  try {
+    bc = new BroadcastChannel(BC_CHANNEL);
+    bc.addEventListener('message', (event) => {
+      try {
+        const msg = event.data;
+        if (msg?.type === 'state-update') set(msg.state);
+      } catch (_) {}
+    });
+  } catch (_) {
+    // BroadcastChannel not supported (e.g. very old browser)
+  }
+
   // ── WebSocket relay connection ──────────────────────────
   let ws = null;
   let reconnectTimer = null;
 
   function connect() {
-    if (ws && ws.readyState < 2) return; // Already open or connecting
+    if (ws && ws.readyState < 2) return; // already open or connecting
 
     try {
       ws = new WebSocket(WS_URL);
@@ -76,15 +96,17 @@ function createScoreboardStore() {
     ws.addEventListener('message', (event) => {
       try {
         const msg = JSON.parse(event.data);
-        // Silently apply incoming state — never re-broadcast to avoid loops
+        // Apply incoming state — never re-broadcast on WS to avoid loops.
+        // The BroadcastChannel is also notified so same-browser tabs stay in sync.
         if (msg.type === 'state-update') {
           set(msg.state);
+          bc?.postMessage({ type: 'state-update', state: msg.state });
         }
       } catch (_) {}
     });
 
     ws.addEventListener('close', scheduleReconnect);
-    ws.addEventListener('error', () => ws.close());
+    ws.addEventListener('error', () => ws?.close());
   }
 
   function scheduleReconnect() {
@@ -92,13 +114,18 @@ function createScoreboardStore() {
     reconnectTimer = setTimeout(connect, 2000);
   }
 
+  // Start trying the WebSocket — silently retries in the background.
+  // If no relay is running this is harmless; BroadcastChannel still works.
+  connect();
+
   function broadcast(state) {
+    // Always send on BroadcastChannel
+    bc?.postMessage({ type: 'state-update', state });
+    // Also send on WebSocket if relay is connected
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'state-update', state }));
     }
   }
-
-  connect();
 
   // ── Public API ────────────────────────────────────────
   return {
