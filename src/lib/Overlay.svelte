@@ -46,9 +46,9 @@
       <div class="center-meta">
         <span class="quarter-tag">{quarterLabel(state.quarter)}</span>
         <span class="meta-sep"></span>
-        <span class="play-clock-inline {state.playClockSeconds <= 5 ? 'critical' : state.playClockSeconds <= 10 ? 'warning' : ''}">
+        <div class="play-clock-box {state.playClockSeconds <= 5 ? 'critical' : state.playClockSeconds <= 10 ? 'warning' : ''}">
           :{String(state.playClockSeconds).padStart(2, '0')}
-        </span>
+        </div>
       </div>
     </div>
 
@@ -212,15 +212,19 @@
     height: 10px;
     background: #4b5563;
   }
-  .play-clock-inline {
-    font-size: 13px;
-    font-weight: 700;
+  .play-clock-box {
+    font-size: 12px;
+    font-weight: 800;
     font-variant-numeric: tabular-nums;
-    color: #d1d5db;
-    letter-spacing: 0.02em;
+    color: #ffffff;
+    letter-spacing: 0.04em;
+    background: #dc2626;
+    padding: 2px 8px;
+    border-radius: 5px;
+    line-height: 1.4;
   }
-  .play-clock-inline.warning { color: #facc15; }
-  .play-clock-inline.critical { color: #ef4444; }
+  .play-clock-box.warning { background: #d97706; }
+  .play-clock-box.critical { background: #991b1b; animation: flag-pulse 0.6s ease-in-out infinite; }
 
   /* ── Info Strip (Down, Distance, Ball On) ── */
   .info-strip {
