@@ -12,6 +12,15 @@
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   });
+
+  // Set body background per route
+  $effect(() => {
+    if (route === '#/overlay') {
+      document.body.style.background = 'transparent';
+    } else {
+      document.body.style.background = '#030712';
+    }
+  });
 </script>
 
 {#if route === '#/overlay'}

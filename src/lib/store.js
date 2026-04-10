@@ -1,7 +1,11 @@
 /**
  * Scoreboard state store with BroadcastChannel sync.
- * Any tab (Controller or Overlay) that imports this module
- * shares the same reactive state via the channel.
+ *
+ * CLOCK ARCHITECTURE: Only the tab that initiates a clock start/stop
+ * actually runs the interval. The "role" field tracks whether this tab
+ * is the clock leader. Clock ticks are broadcast as state updates so
+ * all other tabs (Overlay, etc.) stay perfectly in sync without running
+ * their own intervals.
  */
 
 import { writable, get } from 'svelte/store';
@@ -45,27 +49,28 @@ const DEFAULT_STATE = {
 function createScoreboardStore() {
   const { subscribe, set, update } = writable({ ...DEFAULT_STATE });
 
-  // BroadcastChannel for cross-tab sync
   const channel = new BroadcastChannel('scoreboard-sync');
 
-  // Listen for incoming state from other tabs
+  // When we receive state from another tab, apply it directly
+  // (no re-broadcast to avoid loops)
   channel.onmessage = (event) => {
     if (event.data?.type === 'state-update') {
       set(event.data.state);
     }
   };
 
-  // Broadcast current state to other tabs
   function broadcast(state) {
     channel.postMessage({ type: 'state-update', state });
   }
 
   return {
     subscribe,
+    /** Full replace — broadcasts */
     set(newState) {
       set(newState);
       broadcast(newState);
     },
+    /** Functional update — broadcasts */
     update(fn) {
       update((current) => {
         const next = fn(current);
@@ -73,13 +78,21 @@ function createScoreboardStore() {
         return next;
       });
     },
-    /** Patch one or more fields */
+    /** Merge partial fields — broadcasts */
     patch(partial) {
       update((current) => {
         const next = { ...current, ...partial };
         broadcast(next);
         return next;
       });
+    },
+    /** Silent update — does NOT broadcast (for clock ticks from leader) */
+    _tickUpdate(fn) {
+      update(fn);
+    },
+    /** Silent set — does NOT broadcast (for receiving from channel) */
+    _silentSet(state) {
+      set(state);
     },
     reset() {
       const fresh = { ...DEFAULT_STATE };
@@ -94,43 +107,61 @@ function createScoreboardStore() {
 
 export const scoreboard = createScoreboardStore();
 
-// ── Game Clock tick logic ────────────────────────────────
-let gameClockInterval = null;
+// ── Clock Leader Logic ───────────────────────────────────
+// Only the Controller tab should call startClockLeader().
+// The Overlay never starts intervals — it just receives state.
 
-scoreboard.subscribe((state) => {
-  if (state.gameClockRunning && !gameClockInterval) {
-    gameClockInterval = setInterval(() => {
-      scoreboard.update((s) => {
-        if (s.gameClockSeconds <= 0) {
-          return { ...s, gameClockRunning: false, gameClockSeconds: 0 };
-        }
-        return { ...s, gameClockSeconds: s.gameClockSeconds - 1 };
-      });
-    }, 1000);
-  } else if (!state.gameClockRunning && gameClockInterval) {
+let gameClockInterval = null;
+let playClockInterval = null;
+
+function tickGameClock() {
+  const s = scoreboard.get();
+  if (!s.gameClockRunning) return;
+
+  if (s.gameClockSeconds <= 0) {
+    scoreboard.patch({ gameClockRunning: false, gameClockSeconds: 0 });
+    stopGameClockInterval();
+    return;
+  }
+  // Use patch (which broadcasts) so overlay stays in sync
+  scoreboard.patch({ gameClockSeconds: s.gameClockSeconds - 1 });
+}
+
+function tickPlayClock() {
+  const s = scoreboard.get();
+  if (!s.playClockRunning) return;
+
+  if (s.playClockSeconds <= 0) {
+    scoreboard.patch({ playClockRunning: false, playClockSeconds: 0 });
+    stopPlayClockInterval();
+    return;
+  }
+  scoreboard.patch({ playClockSeconds: s.playClockSeconds - 1 });
+}
+
+export function startGameClockInterval() {
+  if (gameClockInterval) return;
+  gameClockInterval = setInterval(tickGameClock, 1000);
+}
+
+export function stopGameClockInterval() {
+  if (gameClockInterval) {
     clearInterval(gameClockInterval);
     gameClockInterval = null;
   }
-});
+}
 
-// ── Play Clock tick logic ────────────────────────────────
-let playClockInterval = null;
+export function startPlayClockInterval() {
+  if (playClockInterval) return;
+  playClockInterval = setInterval(tickPlayClock, 1000);
+}
 
-scoreboard.subscribe((state) => {
-  if (state.playClockRunning && !playClockInterval) {
-    playClockInterval = setInterval(() => {
-      scoreboard.update((s) => {
-        if (s.playClockSeconds <= 0) {
-          return { ...s, playClockRunning: false, playClockSeconds: 0 };
-        }
-        return { ...s, playClockSeconds: s.playClockSeconds - 1 };
-      });
-    }, 1000);
-  } else if (!state.playClockRunning && playClockInterval) {
+export function stopPlayClockInterval() {
+  if (playClockInterval) {
     clearInterval(playClockInterval);
     playClockInterval = null;
   }
-});
+}
 
 // ── Helpers ──────────────────────────────────────────────
 export function formatGameClock(totalSeconds) {
@@ -140,7 +171,7 @@ export function formatGameClock(totalSeconds) {
 }
 
 export function quarterLabel(q) {
-  if (q <= 4) return `${q}`;
+  if (q <= 4) return `Q${q}`;
   return 'OT';
 }
 
