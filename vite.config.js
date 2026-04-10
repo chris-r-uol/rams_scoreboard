@@ -69,4 +69,15 @@ function scoreboardRelayPlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [tailwindcss(), svelte(), scoreboardRelayPlugin()],
+
+  // Tauri-recommended settings
+  clearScreen: false,
+  server: {
+    port: 5173,
+    strictPort: true,
+    watch: {
+      // Don't trigger HMR on Rust source changes
+      ignored: ['**/src-tauri/**'],
+    },
+  },
 })

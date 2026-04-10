@@ -1,0 +1,26 @@
+[package]
+name = "rams-scoreboard"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "rams_scoreboard_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime and WebSocket relay
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+
+# HTTP server for OBS overlay (release builds only)
+axum = "0.8"
+mime_guess = "2"
+rust-embed = "8"
