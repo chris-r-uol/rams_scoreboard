@@ -1,14 +1,24 @@
 /**
- * Scoreboard state store with BroadcastChannel sync.
+ * Scoreboard state store with WebSocket relay sync.
  *
- * CLOCK ARCHITECTURE: Only the tab that initiates a clock start/stop
- * actually runs the interval. The "role" field tracks whether this tab
- * is the clock leader. Clock ticks are broadcast as state updates so
- * all other tabs (Overlay, etc.) stay perfectly in sync without running
- * their own intervals.
+ * ARCHITECTURE:
+ *   Controller (Chrome/Safari)  ──┐
+ *                                  ├── ws://localhost:5199 (relay) ──► OBS Overlay
+ *   Any other client               ┘
+ *
+ * The relay server (started by the Vite plugin) holds the latest state and
+ * broadcasts every update to all connected clients. When OBS first loads the
+ * overlay it immediately receives the current state so the scorebug is never
+ * empty.
+ *
+ * CLOCK ARCHITECTURE:
+ *   Only the Controller tab runs clock intervals. Every tick is broadcast via
+ *   WebSocket so the Overlay never needs its own timers.
  */
 
 import { writable, get } from 'svelte/store';
+
+const WS_URL = 'ws://localhost:5199';
 
 // ── Default state ────────────────────────────────────────
 const DEFAULT_STATE = {
@@ -17,7 +27,7 @@ const DEFAULT_STATE = {
   awayName: 'AWAY',
   homeScore: 0,
   awayScore: 0,
-  possession: 'home', // 'home' | 'away'
+  possession: 'home',
   homeTimeouts: 3,
   awayTimeouts: 3,
 
@@ -30,7 +40,7 @@ const DEFAULT_STATE = {
   awayText: '#FFFFFF',
 
   // Clocks
-  gameClockSeconds: 900, // 15:00
+  gameClockSeconds: 900,
   gameClockRunning: false,
   playClockSeconds: 40,
   playClockRunning: false,
@@ -41,36 +51,62 @@ const DEFAULT_STATE = {
   distance: 10,
   ballOn: '50',
 
-  // Flag state
+  // Flags
   flagThrown: false,
 };
 
-// ── Create writable store ────────────────────────────────
+// ── Store ────────────────────────────────────────────────
 function createScoreboardStore() {
   const { subscribe, set, update } = writable({ ...DEFAULT_STATE });
 
-  const channel = new BroadcastChannel('scoreboard-sync');
+  // ── WebSocket relay connection ──────────────────────────
+  let ws = null;
+  let reconnectTimer = null;
 
-  // When we receive state from another tab, apply it directly
-  // (no re-broadcast to avoid loops)
-  channel.onmessage = (event) => {
-    if (event.data?.type === 'state-update') {
-      set(event.data.state);
+  function connect() {
+    if (ws && ws.readyState < 2) return; // Already open or connecting
+
+    try {
+      ws = new WebSocket(WS_URL);
+    } catch (_) {
+      scheduleReconnect();
+      return;
     }
-  };
 
-  function broadcast(state) {
-    channel.postMessage({ type: 'state-update', state });
+    ws.addEventListener('message', (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        // Silently apply incoming state — never re-broadcast to avoid loops
+        if (msg.type === 'state-update') {
+          set(msg.state);
+        }
+      } catch (_) {}
+    });
+
+    ws.addEventListener('close', scheduleReconnect);
+    ws.addEventListener('error', () => ws.close());
   }
 
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, 2000);
+  }
+
+  function broadcast(state) {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'state-update', state }));
+    }
+  }
+
+  connect();
+
+  // ── Public API ────────────────────────────────────────
   return {
     subscribe,
-    /** Full replace — broadcasts */
     set(newState) {
       set(newState);
       broadcast(newState);
     },
-    /** Functional update — broadcasts */
     update(fn) {
       update((current) => {
         const next = fn(current);
@@ -78,21 +114,12 @@ function createScoreboardStore() {
         return next;
       });
     },
-    /** Merge partial fields — broadcasts */
     patch(partial) {
       update((current) => {
         const next = { ...current, ...partial };
         broadcast(next);
         return next;
       });
-    },
-    /** Silent update — does NOT broadcast (for clock ticks from leader) */
-    _tickUpdate(fn) {
-      update(fn);
-    },
-    /** Silent set — does NOT broadcast (for receiving from channel) */
-    _silentSet(state) {
-      set(state);
     },
     reset() {
       const fresh = { ...DEFAULT_STATE };
@@ -107,9 +134,10 @@ function createScoreboardStore() {
 
 export const scoreboard = createScoreboardStore();
 
-// ── Clock Leader Logic ───────────────────────────────────
-// Only the Controller tab should call startClockLeader().
-// The Overlay never starts intervals — it just receives state.
+// ── Clock leader logic ───────────────────────────────────
+// Intervals are started/stopped explicitly by the Controller only.
+// Every tick calls scoreboard.patch() which broadcasts over WebSocket,
+// so the Overlay receives each second without running its own timer.
 
 let gameClockInterval = null;
 let playClockInterval = null;
@@ -117,20 +145,17 @@ let playClockInterval = null;
 function tickGameClock() {
   const s = scoreboard.get();
   if (!s.gameClockRunning) return;
-
   if (s.gameClockSeconds <= 0) {
     scoreboard.patch({ gameClockRunning: false, gameClockSeconds: 0 });
     stopGameClockInterval();
     return;
   }
-  // Use patch (which broadcasts) so overlay stays in sync
   scoreboard.patch({ gameClockSeconds: s.gameClockSeconds - 1 });
 }
 
 function tickPlayClock() {
   const s = scoreboard.get();
   if (!s.playClockRunning) return;
-
   if (s.playClockSeconds <= 0) {
     scoreboard.patch({ playClockRunning: false, playClockSeconds: 0 });
     stopPlayClockInterval();
