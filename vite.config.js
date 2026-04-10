@@ -24,6 +24,14 @@ function scoreboardRelayPlugin() {
       let latestState = null
       const wss = new WebSocketServer({ port: WS_RELAY_PORT })
 
+      wss.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`\n  ⚠️  Relay port ${WS_RELAY_PORT} already in use — stop the other dev server first.\n`)
+        } else {
+          throw err
+        }
+      })
+
       wss.on('listening', () => {
         console.log(`\n  🏈 Scoreboard relay running on ws://localhost:${WS_RELAY_PORT}\n`)
       })
