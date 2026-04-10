@@ -1,0 +1,141 @@
+This specification outlines the development of a localized American Football Scoreboard System designed specifically for OBS (Open Broadcaster Software) overlays. The application uses a "Controller-Client" architecture to ensure the operator can update stats on one screen while the broadcast feed updates in real-time on another.
+
+1. Technical Stack
+Framework: Svelte (for high reactivity and small bundle size).
+
+Styling: Tailwind CSS (utility-first for rapid UI development).
+
+State Sync: BroadcastChannel API (allows real-time communication between the Controller tab and the Overlay tab without a backend/database).
+
+Deployment: Localhost (intended to be run via npm run dev or a local build).
+
+2. Functional Requirements: The Data Model
+The application must track and sync the following "Source of Truth" state:
+
+Score & Possession
+Team Names: String (Home/Away).
+
+Score: Integer (0–99).
+
+Possession: Boolean/Toggle (Indicator for which team has the ball).
+
+Timeouts Remaining (TOT): Integer (3 per team, per half).
+
+Clocks & Game State
+Game Clock: MM:SS format (Starts at 15:00 or 12:00, toggleable Start/Stop).
+
+Play Clock: Integer (Starts at 40 or 25, auto-resets).
+
+Quarter: 1, 2, 3, 4, OT.
+
+Down & Distance: E.g., "3rd & 7".
+
+Ball On: String/Integer (e.g., "Own 25" or "Opp 10").
+
+3. UI/UX: The Controller (Admin View)
+The Controller is the operator's dashboard. It should be optimized for "tap" interactions (tablet-friendly).
+
+Configuration Panel
+Team Branding: * Inputs for Primary Color, Secondary Color, and Text Color.
+
+Color Presets: A grid of the 12 most used football colors:
+
+Red, Navy, Royal Blue, Cyan, Orange, Dark Green, Purple, Silver, White, Maroon, Teal, Pewter.
+
+Quick Selectors: Dedicated large buttons for Black (#000000) and Gold (#FFB612).
+
+Team Names: Editable text fields that sync instantly.
+
+Action Panel (The "Hot" Zone)
+Score Buttons: Large +6, +3, +2, +1 and a -1 (for corrections) for each team.
+
+Clock Controls: Large Start/Stop button for the Game Clock. Reset buttons for 40/25 Play Clock.
+
+Possession Toggle: A "Ball" icon that flips between teams.
+
+4. UI/UX: The Display (OBS Overlay)
+The Display is a clean, minimal route (/overlay) designed to be pulled into OBS as a Browser Source.
+
+Chroma Key/Transparency: The background of this route must be transparent (bg-transparent).
+
+Layout: Standard "Scorebug" style (horizontal bar at the bottom or top-left corner).
+
+Visual Priority:
+
+Score and Team Abbreviations (most prominent).
+
+Game Clock and Quarter (secondary).
+
+Down/Distance/Play Clock (tertiary).
+
+Dynamic Styling: Team containers must use the Primary Color as background and Text Color for the tag/name.This specification outlines the development of a localized American Football Scoreboard System designed specifically for OBS (Open Broadcaster Software) overlays. The application uses a "Controller-Client" architecture to ensure the operator can update stats on one screen while the broadcast feed updates in real-time on another.
+
+1. Technical Stack
+Framework: Svelte (for high reactivity and small bundle size).
+
+Styling: Tailwind CSS (utility-first for rapid UI development).
+
+State Sync: BroadcastChannel API (allows real-time communication between the Controller tab and the Overlay tab without a backend/database).
+
+Deployment: Localhost (intended to be run via npm run dev or a local build).
+
+2. Functional Requirements: The Data Model
+The application must track and sync the following "Source of Truth" state:
+
+Score & Possession
+Team Names: String (Home/Away).
+
+Score: Integer (0–99).
+
+Possession: Boolean/Toggle (Indicator for which team has the ball).
+
+Timeouts Remaining (TOT): Integer (3 per team, per half).
+
+Clocks & Game State
+Game Clock: MM:SS format (Starts at 15:00 or 12:00, toggleable Start/Stop).
+
+Play Clock: Integer (Starts at 40 or 25, auto-resets).
+
+Quarter: 1, 2, 3, 4, OT.
+
+Down & Distance: E.g., "3rd & 7".
+
+Ball On: String/Integer (e.g., "Own 25" or "Opp 10").
+
+3. UI/UX: The Controller (Admin View)
+The Controller is the operator's dashboard. It should be optimized for "tap" interactions (tablet-friendly).
+
+Configuration Panel
+Team Branding: * Inputs for Primary Color, Secondary Color, and Text Color.
+
+Color Presets: A grid of the 12 most used football colors:
+
+Red, Navy, Royal Blue, Cyan, Orange, Dark Green, Purple, Silver, White, Maroon, Teal, Pewter.
+
+Quick Selectors: Dedicated large buttons for Black (#000000) and Gold (#FFB612).
+
+Team Names: Editable text fields that sync instantly.
+
+Action Panel (The "Hot" Zone)
+Score Buttons: Large +6, +3, +2, +1 and a -1 (for corrections) for each team.
+
+Clock Controls: Large Start/Stop button for the Game Clock. Reset buttons for 40/25 Play Clock.
+
+Possession Toggle: A "Ball" icon that flips between teams.
+
+4. UI/UX: The Display (OBS Overlay)
+The Display is a clean, minimal route (/overlay) designed to be pulled into OBS as a Browser Source.
+
+Chroma Key/Transparency: The background of this route must be transparent (bg-transparent).
+
+Layout: Standard "Scorebug" style (horizontal bar at the bottom or top-left corner).
+
+Visual Priority:
+
+Score and Team Abbreviations (most prominent).
+
+Game Clock and Quarter (secondary).
+
+Down/Distance/Play Clock (tertiary).
+
+Dynamic Styling: Team containers must use the Primary Color as background and Text Color for the tag/name.
