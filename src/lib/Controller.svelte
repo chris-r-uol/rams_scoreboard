@@ -613,7 +613,11 @@
 
   <!-- ═════ FOOTER ═════ -->
   <footer class="border-t border-gray-800 py-4 text-center">
-    <a href="#/privacy" class="text-xs text-gray-600 hover:text-gray-400 transition-colors">Privacy Policy</a>
+    <div class="flex items-center justify-center gap-4 text-xs text-gray-600">
+      <a href="#/privacy" class="hover:text-gray-400 transition-colors">Privacy Policy</a>
+      <span class="text-gray-800">|</span>
+      <a href="#/terms" class="hover:text-gray-400 transition-colors">Terms &amp; Conditions</a>
+    </div>
   </footer>
 </div>
 

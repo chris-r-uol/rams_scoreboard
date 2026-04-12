@@ -2,6 +2,7 @@
   import Controller from './lib/Controller.svelte';
   import Overlay from './lib/Overlay.svelte';
   import PrivacyPolicy from './lib/PrivacyPolicy.svelte';
+  import TermsAndConditions from './lib/TermsAndConditions.svelte';
 
   let route = $state(window.location.hash || '#/');
 
@@ -28,6 +29,8 @@
   <Overlay />
 {:else if route === '#/privacy'}
   <PrivacyPolicy />
+{:else if route === '#/terms'}
+  <TermsAndConditions />
 {:else}
   <Controller />
 {/if}
