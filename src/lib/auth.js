@@ -38,11 +38,16 @@ async function init() {
   }
 
   // Listen for auth state changes (login, logout, token refresh)
-  supabase.auth.onAuthStateChange(async (_event, newSession) => {
+  supabase.auth.onAuthStateChange(async (event, newSession) => {
     session.set(newSession);
 
     if (newSession?.user) {
       await fetchSubscription(newSession.user.id);
+
+      // After OAuth sign-in, redirect away from the token-laden hash
+      if (event === 'SIGNED_IN' && !window.location.hash.startsWith('#/')) {
+        window.location.hash = '#/';
+      }
     } else {
       subscriptionStatus.set(null);
     }
@@ -81,7 +86,7 @@ export async function signInWithGoogle() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}${window.location.pathname}#/auth/callback`,
+      redirectTo: `${window.location.origin}${window.location.pathname}`,
     },
   });
   if (error) {
@@ -102,23 +107,61 @@ export async function signOut() {
 
 /** Redirect user to Stripe Checkout via Edge Function */
 export async function startCheckout(priceId) {
-  const { data: { session: currentSession } } = await supabase.auth.getSession();
-  if (!currentSession) throw new Error('Not authenticated');
-
-  const response = await supabase.functions.invoke('create-checkout', {
-    body: {
-      priceId,
-      successUrl: `${window.location.origin}${window.location.pathname}#/subscribe/success`,
-      cancelUrl: `${window.location.origin}${window.location.pathname}#/subscribe`,
-    },
-  });
-
-  if (response.error) {
-    console.error('[auth] Checkout creation failed:', response.error);
-    throw response.error;
+  const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+  if (userError || !currentUser) {
+    throw new Error('Session invalid. Please sign out and sign in again.');
   }
 
-  const { url } = response.data;
+  const { data: { session: currentSession } } = await supabase.auth.getSession();
+  if (!currentSession?.access_token) {
+    throw new Error('Missing access token. Please sign out and sign in again.');
+  }
+
+  const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout`;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+
+  let response;
+  try {
+    response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${currentSession.access_token}`,
+        apikey: anonKey,
+      },
+      body: JSON.stringify({
+        priceId,
+        successUrl: `${window.location.origin}${window.location.pathname}#/subscribe/success`,
+        cancelUrl: `${window.location.origin}${window.location.pathname}#/subscribe`,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Checkout request timed out. Check Edge Function logs and Stripe secret configuration.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.error || payload?.message || `Checkout creation failed (${response.status})`;
+    console.error('[auth] Checkout creation failed:', message);
+    throw new Error(message);
+  }
+
+  const { url } = payload || {};
   if (url) {
     window.location.href = url;
   } else {

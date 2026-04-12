@@ -29,15 +29,6 @@
     return () => window.removeEventListener('hashchange', handleHashChange);
   });
 
-  // Handle OAuth callback — refresh subscription then redirect
-  $effect(() => {
-    if (route === '#/auth/callback' && authenticated && !authLoading) {
-      refreshSubscription().then(() => {
-        window.location.hash = subscribed ? '#/' : '#/subscribe';
-      });
-    }
-  });
-
   // Handle successful subscription return — refresh and redirect
   $effect(() => {
     if (route === '#/subscribe/success' && authenticated && !authLoading) {
@@ -86,7 +77,7 @@
   {:else}
     <Subscribe />
   {/if}
-{:else if route === '#/auth/callback' || route === '#/subscribe/success'}
+{:else if route === '#/subscribe/success'}
   <div class="min-h-screen bg-gray-950 flex items-center justify-center">
     <div class="text-gray-500 text-lg">Processing…</div>
   </div>

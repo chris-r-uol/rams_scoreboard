@@ -23,6 +23,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -48,14 +62,30 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Authorization token missing after Bearer prefix' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    const claims = decodeJwtPayload(token);
+    const userId = typeof claims?.sub === 'string' ? claims.sub : null;
+    const userEmailFromClaims = typeof claims?.email === 'string' ? claims.email : null;
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Invalid JWT: missing subject claim' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Optional enrichment: if email claim is missing, fetch from auth admin API.
+    let userEmail = userEmailFromClaims;
+    if (!userEmail) {
+      const { data: userData } = await supabase.auth.admin.getUserById(userId);
+      userEmail = userData?.user?.email ?? null;
     }
 
     const { priceId, successUrl, cancelUrl } = await req.json();
@@ -71,7 +101,7 @@ serve(async (req) => {
     const { data: existing } = await supabase
       .from('stripe_customers')
       .select('stripe_customer_id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     let customerId = existing?.stripe_customer_id;
@@ -79,14 +109,14 @@ serve(async (req) => {
     // Create a Stripe customer if none exists
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: { supabase_user_id: user.id },
+        email: userEmail ?? undefined,
+        metadata: { supabase_user_id: userId },
       });
       customerId = customer.id;
 
       // Store the mapping
       await supabase.from('stripe_customers').upsert({
-        user_id: user.id,
+        user_id: userId,
         stripe_customer_id: customerId,
       });
     }
@@ -99,7 +129,7 @@ serve(async (req) => {
       success_url: successUrl,
       cancel_url: cancelUrl,
       subscription_data: {
-        metadata: { supabase_user_id: user.id },
+        metadata: { supabase_user_id: userId },
       },
     });
 
