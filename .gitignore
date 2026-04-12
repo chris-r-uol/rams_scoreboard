@@ -28,3 +28,6 @@ src-tauri/target/
 
 # Secrets
 credentials.json
+.env
+.env.local
+.env.*.local
