@@ -1,6 +1,7 @@
 <script>
   import Controller from './lib/Controller.svelte';
   import Overlay from './lib/Overlay.svelte';
+  import PrivacyPolicy from './lib/PrivacyPolicy.svelte';
 
   let route = $state(window.location.hash || '#/');
 
@@ -25,6 +26,8 @@
 
 {#if route === '#/overlay'}
   <Overlay />
+{:else if route === '#/privacy'}
+  <PrivacyPolicy />
 {:else}
   <Controller />
 {/if}

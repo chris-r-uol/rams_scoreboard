@@ -610,6 +610,11 @@
     <!-- bottom breathing room -->
     <div class="h-8"></div>
   </div>
+
+  <!-- ═════ FOOTER ═════ -->
+  <footer class="border-t border-gray-800 py-4 text-center">
+    <a href="#/privacy" class="text-xs text-gray-600 hover:text-gray-400 transition-colors">Privacy Policy</a>
+  </footer>
 </div>
 
 <style>
