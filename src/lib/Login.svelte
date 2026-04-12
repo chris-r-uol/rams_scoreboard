@@ -20,22 +20,23 @@
   <div class="w-full max-w-md">
 
     <!-- Logo / Title -->
-    <div class="text-center mb-10">
-      <span class="text-5xl mb-4 block">🏈</span>
+    <div class="text-center mb-12">
+      <span class="text-5xl mb-5 block">🏈</span>
       <h1 class="text-3xl font-bold text-white tracking-tight">Stream Your Score</h1>
-      <p class="text-gray-500 text-sm mt-2">Professional broadcast scoreboard</p>
+      <p class="text-gray-500 text-sm mt-2.5 tracking-wide">Professional broadcast scoreboard</p>
     </div>
 
     <!-- Sign-in Card -->
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-8">
-      <h2 class="text-lg font-semibold text-white mb-6 text-center">Sign in to continue</h2>
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-10 shadow-xl shadow-black/20">
+      <h2 class="text-lg font-semibold text-white mb-8 text-center tracking-tight">Sign in to continue</h2>
 
       <button
         onclick={handleGoogleSignIn}
         disabled={signingIn}
-        class="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl
-               bg-white hover:bg-gray-100 text-gray-900 font-semibold text-sm
-               transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl
+               bg-white hover:bg-gray-50 text-gray-900 font-semibold text-sm
+               transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+               shadow-sm hover:shadow-md active:scale-[0.98]"
       >
         <!-- Google icon -->
         <svg width="20" height="20" viewBox="0 0 24 24">
@@ -48,18 +49,18 @@
       </button>
 
       {#if error}
-        <div class="mt-4 p-3 rounded-lg bg-red-950/50 border border-red-900/50 text-red-300 text-sm text-center">
+        <div class="mt-5 p-3.5 rounded-xl bg-red-950/50 border border-red-900/50 text-red-300 text-sm text-center leading-relaxed">
           {error}
         </div>
       {/if}
     </div>
 
     <!-- Legal links -->
-    <div class="mt-6 text-center text-xs text-gray-600">
+    <div class="mt-8 text-center text-[11px] text-gray-600 leading-relaxed tracking-wide">
       By signing in, you agree to our
-      <a href="#/terms" class="text-gray-500 hover:text-gray-400 underline">Terms &amp; Conditions</a>
+      <a href="#/terms" class="text-gray-500 hover:text-gray-400 underline underline-offset-2">Terms &amp; Conditions</a>
       and
-      <a href="#/privacy" class="text-gray-500 hover:text-gray-400 underline">Privacy Policy</a>.
+      <a href="#/privacy" class="text-gray-500 hover:text-gray-400 underline underline-offset-2">Privacy Policy</a>.
     </div>
   </div>
 </div>

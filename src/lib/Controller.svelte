@@ -9,6 +9,7 @@
     startPlayClockInterval,
     stopPlayClockInterval,
   } from './store.js';
+  import { signOut } from './auth.js';
 
   let state = $state({});
   scoreboard.subscribe((s) => { state = s; });
@@ -136,31 +137,75 @@
   function toggleFlag() {
     scoreboard.patch({ flagThrown: !state.flagThrown });
   }
+
+  // ── Theme & Auth ───────────────────────────────────────
+  let darkMode = $state(localStorage.getItem('theme') !== 'light');
+
+  function toggleTheme() {
+    darkMode = !darkMode;
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    window.location.hash = '#/login';
+  }
 </script>
 
-<div class="min-h-screen bg-gray-950 text-gray-100 select-none">
+<div class="controller-root min-h-screen select-none" data-theme={darkMode ? 'dark' : 'light'}>
 
   <!-- ═════ HEADER ═════ -->
-  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-50">
-    <div class="max-w-screen-2xl mx-auto px-6 py-3 flex items-center justify-between">
-      <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-        <span>🏈</span>
-        Scoreboard Controller
-      </h1>
-      <div class="flex gap-3">
-        <a href="#/overlay" target="_blank"
-           class="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors border border-gray-700">
-          Open Overlay ↗
+  <header class="header-bar sticky top-0 z-50">
+    <div class="max-w-screen-2xl mx-auto px-5 py-3 flex items-center gap-4">
+
+      <!-- Brand -->
+      <div class="flex items-center gap-3 flex-1 min-w-0">
+        <span class="text-2xl leading-none">🏈</span>
+        <div class="leading-tight">
+          <h1 class="header-title text-xl font-bold tracking-tight leading-none">Scoreboard Controller</h1>
+          <p class="header-subtitle text-[10px] uppercase tracking-[0.15em] mt-0.5">Stream Your Score</p>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center gap-2">
+
+        <!-- Theme toggle -->
+        <button onclick={toggleTheme} class="btn-header-icon" title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {#if darkMode}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          {:else}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          {/if}
+        </button>
+
+        <div class="header-sep"></div>
+
+        <!-- Open Overlay -->
+        <a href="#/overlay" target="_blank" class="btn-header-overlay">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Open Overlay
         </a>
+
+        <!-- Reset All -->
         <button onclick={() => { stopGameClockInterval(); stopPlayClockInterval(); scoreboard.reset(); }}
-                class="px-4 py-2 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 text-sm font-medium transition-colors border border-red-900/50">
+                class="btn-header-danger">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
           Reset All
         </button>
+
+        <div class="header-sep"></div>
+
+        <!-- Sign out -->
+        <button onclick={handleSignOut} class="btn-header-icon" title="Sign out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+
       </div>
     </div>
   </header>
 
-  <div class="max-w-screen-2xl mx-auto px-6 py-6 space-y-5">
+  <div class="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
 
     <!-- ══════════════════════════════════════════════════════════
          ROW 1 · LIVE PREVIEW
@@ -230,25 +275,25 @@
     <!-- ══════════════════════════════════════════════════════════
          ROW 2 · CLOCKS + QUARTER
     ═══════════════════════════════════════════════════════════════ -->
-    <div class="grid grid-cols-3 gap-5">
+    <div class="grid grid-cols-3 gap-6">
 
       <!-- Game Clock -->
       <div class="card text-center">
         <div class="card-header justify-center">
           <span class="section-label">Game Clock</span>
         </div>
-        <div class="text-[64px] font-black tabular-nums leading-none mb-5
-                    {state.gameClockRunning ? 'text-green-400' : 'text-white'}">
+        <div class="text-[56px] font-black tabular-nums leading-none mb-6
+                    {state.gameClockRunning ? 'text-green-400' : 'val-primary'}">
           {formatGameClock(state.gameClockSeconds)}
         </div>
         <button onclick={toggleGameClock}
-                class="w-full py-4 rounded-xl text-base font-bold mb-4 transition-all duration-150
+                class="w-full py-4 rounded-xl text-sm font-bold tracking-wide mb-5 transition-all duration-150
                        {state.gameClockRunning
                          ? 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/20'
                          : 'bg-green-600 hover:bg-green-500 shadow-lg shadow-green-600/20'}">
           {state.gameClockRunning ? '⏸  STOP CLOCK' : '▶  START CLOCK'}
         </button>
-        <div class="flex gap-2 flex-wrap justify-center">
+        <div class="flex gap-2.5 flex-wrap justify-center">
           <button onclick={() => resetGameClock(15)} class="btn-secondary">15:00</button>
           <button onclick={() => resetGameClock(12)} class="btn-secondary">12:00</button>
           <button onclick={() => resetGameClock(10)} class="btn-secondary">10:00</button>
@@ -262,14 +307,14 @@
         <div class="card-header justify-center">
           <span class="section-label">Quarter</span>
         </div>
-        <div class="flex items-center justify-center gap-6 py-4">
+        <div class="flex items-center justify-center gap-8 py-6">
           <button onclick={prevQuarter} class="btn-round">‹</button>
-          <span class="text-7xl font-black text-white tabular-nums">
+          <span class="text-6xl font-black val-primary tabular-nums">
             {quarterLabel(state.quarter)}
           </span>
           <button onclick={nextQuarter} class="btn-round">›</button>
         </div>
-        <p class="text-xs text-gray-600 pb-2">Next Q resets clock &amp; timeouts</p>
+        <p class="text-[11px] text-gray-600 pb-1 tracking-wide">Next Q resets clock &amp; timeouts</p>
       </div>
 
       <!-- Play Clock -->
@@ -277,13 +322,13 @@
         <div class="card-header justify-center">
           <span class="section-label">Play Clock</span>
         </div>
-        <div class="text-[64px] font-black tabular-nums leading-none mb-5
-                    {state.playClockRunning ? 'text-amber-400' : 'text-white'}
+        <div class="text-[56px] font-black tabular-nums leading-none mb-6
+                    {state.playClockRunning ? 'text-amber-400' : 'val-primary'}
                     {state.playClockSeconds <= 5 && state.playClockSeconds > 0 ? '!text-red-400' : ''}">
           {state.playClockSeconds}
         </div>
         <button onclick={togglePlayClock}
-                class="w-full py-4 rounded-xl text-base font-bold mb-4 transition-all duration-150
+                class="w-full py-4 rounded-xl text-sm font-bold tracking-wide mb-5 transition-all duration-150
                        {state.playClockRunning
                          ? 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/20'
                          : 'bg-green-600 hover:bg-green-500 shadow-lg shadow-green-600/20'}">
@@ -299,20 +344,20 @@
     <!-- ══════════════════════════════════════════════════════════
          ROW 3 · SCORE + POSSESSION/FLAG + DOWN/DISTANCE/BALL ON
     ═══════════════════════════════════════════════════════════════ -->
-    <div class="grid grid-cols-12 gap-5">
+    <div class="grid grid-cols-12 gap-6">
 
       <!-- Home Score & Timeouts -->
       <div class="col-span-4 card" style="border-top: 3px solid {state.homePrimary};">
         <div class="card-header">
-          <span class="section-label">Home — <span class="text-gray-300">{state.homeName}</span></span>
+          <span class="section-label">Home — <span class="val-secondary">{state.homeName}</span></span>
         </div>
-        <div class="flex items-center gap-5 mb-5">
+        <div class="flex items-center gap-5 mb-6">
           {#if state.possession === 'home'}
             <span class="text-amber-400 text-xl">🏈</span>
           {/if}
-          <span class="text-7xl font-black tabular-nums leading-none text-white">{state.homeScore}</span>
+          <span class="text-6xl font-black tabular-nums leading-none val-primary">{state.homeScore}</span>
         </div>
-        <div class="grid grid-cols-5 gap-2 mb-5">
+        <div class="grid grid-cols-5 gap-2.5 mb-6">
           {#each [6, 3, 2, 1] as pts}
             <button onclick={() => addScore('home', pts)} class="btn-score">+{pts}</button>
           {/each}
@@ -334,15 +379,15 @@
       </div>
 
       <!-- Center: Possession + Flag + Down/Distance + Ball On -->
-      <div class="col-span-4 space-y-3">
+      <div class="col-span-4 space-y-4">
 
         <!-- Possession & Flag -->
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-4">
           <button onclick={togglePossession}
                   class="card hover:bg-gray-800/80 transition-colors text-center py-4 cursor-pointer">
             <div class="section-label text-[10px] mb-1">Possession</div>
             <div class="text-3xl mb-1">🏈</div>
-            <div class="text-sm font-bold text-white leading-tight">
+            <div class="text-sm font-bold val-primary leading-tight">
               {state.possession === 'home' ? state.homeName : state.awayName}
             </div>
           </button>
@@ -359,16 +404,16 @@
 
         <!-- Down & Distance + Ball On -->
         <div class="card">
-          <div class="text-center text-2xl font-bold text-white mb-4">
+          <div class="text-center text-xl font-bold val-primary mb-5">
             {downLabel(state.down, state.distance)} · Ball on {state.ballOn}
           </div>
-          <div class="grid grid-cols-3 gap-4">
+          <div class="grid grid-cols-3 gap-5">
             <!-- Down -->
             <div class="flex flex-col items-center gap-2">
               <span class="section-label text-[10px]">Down</span>
               <div class="flex items-center gap-2">
                 <button onclick={() => cycleDown(-1)} class="btn-round-sm">‹</button>
-                <span class="text-xl font-black text-white w-6 text-center">{state.down}</span>
+                <span class="text-xl font-black val-primary w-6 text-center">{state.down}</span>
                 <button onclick={() => cycleDown(1)} class="btn-round-sm">›</button>
               </div>
             </div>
@@ -379,7 +424,7 @@
                 <button onclick={() => adjustDistance(-1)} class="btn-round-sm">‹</button>
                 <input type="number" bind:value={state.distance}
                        oninput={() => scoreboard.patch({ distance: state.distance })}
-                       class="bg-transparent text-xl font-black text-white w-10 text-center border-b-2 border-gray-700 focus:border-amber-400 outline-none"
+                       class="bg-transparent text-xl font-black val-primary w-10 text-center border-b-2 border-gray-700 focus:border-amber-400 outline-none"
                        min="1" max="99" />
                 <button onclick={() => adjustDistance(1)} class="btn-round-sm">›</button>
               </div>
@@ -389,7 +434,7 @@
               <span class="section-label text-[10px]">Ball On</span>
               <input type="text" bind:value={state.ballOn}
                      oninput={() => scoreboard.patch({ ballOn: state.ballOn })}
-                     class="bg-transparent text-xl font-black text-white w-16 text-center border-b-2 border-gray-700 focus:border-amber-400 outline-none"
+                     class="bg-transparent text-xl font-black val-primary w-16 text-center border-b-2 border-gray-700 focus:border-amber-400 outline-none"
                      maxlength="8" />
             </div>
           </div>
@@ -399,15 +444,15 @@
       <!-- Away Score & Timeouts -->
       <div class="col-span-4 card" style="border-top: 3px solid {state.awayPrimary};">
         <div class="card-header justify-end">
-          <span class="section-label"><span class="text-gray-300">{state.awayName}</span> — Away</span>
+          <span class="section-label"><span class="val-secondary">{state.awayName}</span> — Away</span>
         </div>
-        <div class="flex items-center justify-end gap-5 mb-5">
-          <span class="text-7xl font-black tabular-nums leading-none text-white">{state.awayScore}</span>
+        <div class="flex items-center justify-end gap-5 mb-6">
+          <span class="text-6xl font-black tabular-nums leading-none val-primary">{state.awayScore}</span>
           {#if state.possession === 'away'}
             <span class="text-amber-400 text-xl">🏈</span>
           {/if}
         </div>
-        <div class="grid grid-cols-5 gap-2 mb-5">
+        <div class="grid grid-cols-5 gap-2.5 mb-6">
           {#each [6, 3, 2, 1] as pts}
             <button onclick={() => addScore('away', pts)} class="btn-score">+{pts}</button>
           {/each}
@@ -454,7 +499,7 @@
       </button>
 
       {#if teamSetupOpen}
-        <div class="mt-6 grid grid-cols-2 gap-8 pt-6 border-t border-gray-800">
+        <div class="mt-6 grid grid-cols-2 gap-10 pt-6 border-t border-gray-800">
 
           <!-- Home Team Config -->
           <div>
@@ -608,144 +653,295 @@
     </div>
 
     <!-- bottom breathing room -->
-    <div class="h-8"></div>
+    <div class="h-10"></div>
   </div>
 
   <!-- ═════ FOOTER ═════ -->
-  <footer class="border-t border-gray-800 py-4 text-center">
-    <div class="flex items-center justify-center gap-4 text-xs text-gray-600">
+  <footer class="border-t border-gray-800/60 py-6 text-center">
+    <div class="flex items-center justify-center gap-5 text-[11px] text-gray-600 tracking-wide">
       <a href="#/privacy" class="hover:text-gray-400 transition-colors">Privacy Policy</a>
-      <span class="text-gray-800">|</span>
+      <span class="text-gray-800">·</span>
       <a href="#/terms" class="hover:text-gray-400 transition-colors">Terms &amp; Conditions</a>
     </div>
   </footer>
 </div>
 
 <style>
-  /* ── Card ── */
+  /* ════════════════════════════════════════════════════════
+     THEME VARIABLES
+  ════════════════════════════════════════════════════════ */
+  .controller-root {
+    /* Dark mode (default) */
+    --c-bg:         #030712;
+    --c-bg-header:  rgba(3, 7, 18, 0.88);
+    --c-bd-header:  #1f2937;
+    --c-text:       #f9fafb;
+    --c-text-sub:   #9ca3af;
+    --c-text-mute:  #6b7280;
+    --c-bg-card:    rgba(17, 24, 39, 0.65);
+    --c-bd-card:    #1f2937;
+    --c-bg-btn:     #1f2937;
+    --c-bg-btn-h:   #374151;
+    --c-bd-btn:     #374151;
+    --c-text-btn:   #e5e7eb;
+    --c-bg-input:   #111827;
+    --c-bd-input:   #374151;
+    --c-text-val:   #f9fafb;
+    --c-sep:        #1f2937;
+    /* Tailwind ring-offset override for color swatches */
+    --tw-ring-offset-color: #111827;
+
+    background: var(--c-bg);
+    color: var(--c-text);
+  }
+
+  .controller-root[data-theme="light"] {
+    --c-bg:         #f1f5f9;
+    --c-bg-header:  rgba(248, 250, 252, 0.92);
+    --c-bd-header:  #e2e8f0;
+    --c-text:       #0f172a;
+    --c-text-sub:   #475569;
+    --c-text-mute:  #64748b;
+    --c-bg-card:    rgba(255, 255, 255, 0.95);
+    --c-bd-card:    #e2e8f0;
+    --c-bg-btn:     #f1f5f9;
+    --c-bg-btn-h:   #e2e8f0;
+    --c-bd-btn:     #cbd5e1;
+    --c-text-btn:   #1e293b;
+    --c-bg-input:   #ffffff;
+    --c-bd-input:   #cbd5e1;
+    --c-text-val:   #0f172a;
+    --c-sep:        #e2e8f0;
+    --tw-ring-offset-color: #fff;
+  }
+
+  /* Light mode: fix remaining hardcoded Tailwind text utilities */
+  .controller-root[data-theme="light"] input,
+  .controller-root[data-theme="light"] input::placeholder {
+    color: var(--c-text-val);
+  }
+
+  /* ════════════════════════════════════════════════════════
+     HEADER
+  ════════════════════════════════════════════════════════ */
+  .header-bar {
+    background: var(--c-bg-header);
+    border-bottom: 1px solid var(--c-bd-header);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .header-title   { color: var(--c-text); }
+  .header-subtitle { color: var(--c-text-mute); }
+  .header-sep {
+    width: 1px;
+    height: 22px;
+    background: var(--c-sep);
+    flex-shrink: 0;
+    border-radius: 1px;
+  }
+
+  /* Icon-only ghost button */
+  .btn-header-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--c-text-sub);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .btn-header-icon:hover  { background: var(--c-bg-btn); border-color: var(--c-bd-btn); color: var(--c-text); }
+  .btn-header-icon:active { transform: scale(0.9); }
+
+  /* Open Overlay */
+  .btn-header-overlay {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border: 1px solid #1d4ed8;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .btn-header-overlay:hover  { background: #1d4ed8; }
+  .btn-header-overlay:active { transform: scale(0.97); }
+
+  /* Reset All */
+  .btn-header-danger {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border: 1px solid #b91c1c;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-header-danger:hover  { background: #b91c1c; }
+  .btn-header-danger:active { transform: scale(0.97); }
+
+  /* ════════════════════════════════════════════════════════
+     CARD
+  ════════════════════════════════════════════════════════ */
   .card {
-    background: rgba(17, 24, 39, 0.6);
-    border: 1px solid #1f2937;
+    background: var(--c-bg-card);
+    border: 1px solid var(--c-bd-card);
     border-radius: 16px;
-    padding: 24px;
+    padding: 28px;
+    transition: border-color 0.2s ease;
   }
   .card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
   }
   .section-label {
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #6b7280;
+    letter-spacing: 0.08em;
+    color: var(--c-text-mute);
   }
 
-  /* ── Score Buttons ── */
+  /* ── Adaptive text colours ── */
+  .val-primary   { color: var(--c-text-val); }
+  .val-secondary { color: var(--c-text-sub); }
+
+  /* ════════════════════════════════════════════════════════
+     SCORE BUTTONS
+  ════════════════════════════════════════════════════════ */
   .btn-score {
-    padding: 14px 0;
+    padding: 16px 0;
     border-radius: 12px;
     font-weight: 800;
-    font-size: 18px;
-    background: #1f2937;
-    color: #e5e7eb;
-    border: 1px solid #374151;
-    transition: all 0.15s;
+    font-size: 17px;
+    background: var(--c-bg-btn);
+    color: var(--c-text-btn);
+    border: 1px solid var(--c-bd-btn);
+    transition: all 0.15s ease;
     cursor: pointer;
   }
-  .btn-score:hover { background: #374151; }
-  .btn-score:active { transform: scale(0.96); }
+  .btn-score:hover  { background: var(--c-bg-btn-h); }
+  .btn-score:active { transform: scale(0.95); }
 
   .btn-score-neg {
-    padding: 14px 0;
+    padding: 16px 0;
     border-radius: 12px;
     font-weight: 800;
-    font-size: 18px;
+    font-size: 17px;
     background: rgba(127, 29, 29, 0.3);
     color: #fca5a5;
     border: 1px solid rgba(127, 29, 29, 0.5);
-    transition: all 0.15s;
+    transition: all 0.15s ease;
     cursor: pointer;
   }
-  .btn-score-neg:hover { background: rgba(127, 29, 29, 0.5); }
-  .btn-score-neg:active { transform: scale(0.96); }
+  .btn-score-neg:hover  { background: rgba(127, 29, 29, 0.5); }
+  .btn-score-neg:active { transform: scale(0.95); }
 
-  /* ── Secondary Buttons ── */
+  /* ════════════════════════════════════════════════════════
+     SECONDARY BUTTONS
+  ════════════════════════════════════════════════════════ */
   .btn-secondary {
-    padding: 8px 16px;
+    padding: 10px 18px;
     border-radius: 10px;
-    background: #1f2937;
-    color: #d1d5db;
+    background: var(--c-bg-btn);
+    color: var(--c-text-btn);
     font-size: 13px;
     font-weight: 600;
-    border: 1px solid #374151;
-    transition: all 0.15s;
+    border: 1px solid var(--c-bd-btn);
+    transition: all 0.15s ease;
     cursor: pointer;
   }
-  .btn-secondary:hover { background: #374151; }
+  .btn-secondary:hover  { background: var(--c-bg-btn-h); }
+  .btn-secondary:active { transform: scale(0.96); }
 
   .btn-sm {
-    padding: 6px 14px;
+    padding: 8px 16px;
     border-radius: 8px;
-    background: #1f2937;
-    color: #9ca3af;
+    background: var(--c-bg-btn);
+    color: var(--c-text-mute);
     font-size: 12px;
     font-weight: 600;
-    border: 1px solid #374151;
-    transition: all 0.15s;
+    border: 1px solid var(--c-bd-btn);
+    transition: all 0.15s ease;
     cursor: pointer;
   }
-  .btn-sm:hover { background: #374151; }
+  .btn-sm:hover  { background: var(--c-bg-btn-h); }
+  .btn-sm:active { transform: scale(0.96); }
 
   .btn-round {
     width: 48px;
     height: 48px;
     border-radius: 14px;
-    background: #1f2937;
-    color: #e5e7eb;
+    background: var(--c-bg-btn);
+    color: var(--c-text-btn);
     font-size: 24px;
     font-weight: 700;
-    border: 1px solid #374151;
+    border: 1px solid var(--c-bd-btn);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
   }
-  .btn-round:hover { background: #374151; }
+  .btn-round:hover  { background: var(--c-bg-btn-h); }
+  .btn-round:active { transform: scale(0.93); }
 
   .btn-round-sm {
     width: 36px;
     height: 36px;
     border-radius: 10px;
-    background: #1f2937;
-    color: #e5e7eb;
+    background: var(--c-bg-btn);
+    color: var(--c-text-btn);
     font-size: 18px;
     font-weight: 700;
-    border: 1px solid #374151;
+    border: 1px solid var(--c-bd-btn);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
   }
-  .btn-round-sm:hover { background: #374151; }
+  .btn-round-sm:hover  { background: var(--c-bg-btn-h); }
+  .btn-round-sm:active { transform: scale(0.93); }
 
-  /* ── Color Controls ── */
+  /* ════════════════════════════════════════════════════════
+     COLOR CONTROLS
+  ════════════════════════════════════════════════════════ */
   .color-input {
     width: 32px;
     height: 32px;
     border-radius: 8px;
     cursor: pointer;
-    border: 1px solid #374151;
+    border: 1px solid var(--c-bd-btn);
     padding: 0;
+    transition: border-color 0.15s ease;
   }
+  .color-input:hover { border-color: var(--c-text-mute); }
+
   .color-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
+    gap: 8px;
   }
   .color-swatch {
     width: 100%;
@@ -753,7 +949,8 @@
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     cursor: pointer;
-    transition: transform 0.15s;
+    transition: all 0.15s ease;
   }
-  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch:hover  { transform: scale(1.15); border-color: rgba(255, 255, 255, 0.35); }
+  .color-swatch:active { transform: scale(0.95); }
 </style>
