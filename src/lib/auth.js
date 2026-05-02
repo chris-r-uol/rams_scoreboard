@@ -24,6 +24,10 @@ export const user = derived(session, ($s) => $s?.user ?? null);
 
 // ── Initialise session on load ───────────────────────────
 async function init() {
+  if (!supabase) {
+    loading.set(false);
+    return;
+  }
   try {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     session.set(currentSession);
