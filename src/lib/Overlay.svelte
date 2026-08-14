@@ -9,6 +9,7 @@
   import { scoreboard } from './store.js';
   import { getRoomFromUrl } from './room.js';
   import { leaveRoom } from './realtime.js';
+  import { overlayAnchorStyle, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE } from './overlayLayout.js';
   import FootballOverlay from './sports/FootballOverlay.svelte';
   import SoccerOverlay from './sports/SoccerOverlay.svelte';
   import IceHockeyOverlay from './sports/IceHockeyOverlay.svelte';
@@ -39,6 +40,17 @@
   });
 
   onDestroy(() => leaveRoom());
+
+  // Anchor and scale are published as CSS custom properties, which every sport
+  // overlay reads. Set on a plain wrapper with no transform of its own — a
+  // transform here would make the overlay's `position: fixed` resolve against
+  // this element instead of the OBS canvas.
+  const anchorStyle = $derived(
+    overlayAnchorStyle(
+      state.overlayPosition ?? DEFAULT_OVERLAY_POSITION,
+      state.overlayScale ?? DEFAULT_OVERLAY_SCALE,
+    ),
+  );
 </script>
 
 {#if !room}
@@ -55,7 +67,9 @@
               border-radius:8px;font-family:sans-serif;font-size:13px;font-weight:600;">
     Waiting for sport selection…
   </div>
-{:else if state.sport === 'american-football'}
+{:else}
+<div style={anchorStyle}>
+{#if state.sport === 'american-football'}
   <FootballOverlay />
 {:else if state.sport === 'soccer'}
   <SoccerOverlay />
@@ -80,8 +94,10 @@
   be edited out by a determined user. Enforcing it properly needs the value
   signed server-side; that is a deliberate trade for now.
 -->
-{#if room && state.sport && state.plan === 'free'}
+{#if state.plan === 'free'}
   <div class="watermark">Stream Your Score</div>
+{/if}
+</div>
 {/if}
 
 <style>
