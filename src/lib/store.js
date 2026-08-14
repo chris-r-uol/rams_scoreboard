@@ -89,8 +89,14 @@ let hostClockSkewMs = 0;
 /** True when the Controller recovered an in-progress game on load. */
 export const gameResumed = writable(false);
 
-/** Holds the pre-reset game so a mis-clicked "Reset Game" is recoverable. */
-export const undoableReset = writable(null);
+/** True when a reset just happened, so the UI can offer to take it back. */
+export const undoableReset = writable(false);
+
+/** How many operator actions can be taken back. */
+const UNDO_LIMIT = 40;
+
+/** Number of undoable steps available, for enabling UI. */
+export const undoDepth = writable(0);
 
 /** Re-anchor any clock whose seconds or running flag this patch touches. */
 function withClockAnchors(current, partial) {
@@ -552,8 +558,49 @@ function createScoreboardStore() {
     });
   }
 
+  // ── Undo ────────────────────────────────────────────────
+  // Only the Controller records history; an overlay applying remote state is
+  // not performing operator actions and has nothing to take back.
+  //
+  // Only deliberate mutations land here. Clock movement is applied silently by
+  // the projector, so a running clock does not bury a mis-click under hundreds
+  // of one-second entries.
+  let undoStack = [];
+  let recordingSuspended = false;
+
+  function recordUndo(previous) {
+    if (!isController || recordingSuspended) return;
+    undoStack.push(previous);
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    undoDepth.set(undoStack.length);
+  }
+
+  /** Take back the last operator action. Returns whether anything changed. */
+  function undo() {
+    const previous = undoStack.pop();
+    undoDepth.set(undoStack.length);
+    if (!previous) return false;
+
+    // Restoring is itself a state change; suspend recording so undo does not
+    // push the state it is undoing back onto the stack.
+    recordingSuspended = true;
+    try {
+      // Re-anchor so a clock that was running resumes from the restored value
+      // rather than jumping by however long the operator took to hit undo.
+      const restored = anchorAll(previous);
+      set(restored);
+      broadcast(restored);
+    } finally {
+      recordingSuspended = false;
+    }
+
+    undoableReset.set(false);
+    return true;
+  }
+
   function publicPatch(partial) {
     update((current) => {
+      recordUndo(current);
       const next = { ...current, ...withClockAnchors(current, partial) };
       broadcast(next);
       return next;
@@ -586,13 +633,19 @@ function createScoreboardStore() {
       skewSamples = [];
     },
 
+    undo,
+
     set(newState) {
-      const next = anchorAll(newState);
-      set(next);
-      broadcast(next);
+      update((current) => {
+        recordUndo(current);
+        const next = anchorAll(newState);
+        broadcast(next);
+        return next;
+      });
     },
     update(fn) {
       update((current) => {
+        recordUndo(current);
         const next = anchorAll(fn(current));
         broadcast(next);
         return next;
@@ -600,13 +653,19 @@ function createScoreboardStore() {
     },
     patch: publicPatch,
     reset() {
-      const fresh = anchorAll({ ...DEFAULT_STATE });
-      set(fresh);
-      broadcast(fresh);
+      update((current) => {
+        recordUndo(current);
+        const fresh = anchorAll({ ...DEFAULT_STATE });
+        broadcast(fresh);
+        undoableReset.set(true);
+        return fresh;
+      });
     },
     // Reset to sport-specific defaults, preserving team names/colours
     resetSport(sport) {
       update((current) => {
+        recordUndo(current);
+        undoableReset.set(true);
         const defaults = SPORT_DEFAULTS[sport] ?? {};
         const next = anchorAll({
           ...current,
@@ -619,6 +678,7 @@ function createScoreboardStore() {
     },
     setSport(sport) {
       update((current) => {
+        recordUndo(current);
         const defaults = SPORT_DEFAULTS[sport] ?? {};
         const next = anchorAll({
           ...current,
