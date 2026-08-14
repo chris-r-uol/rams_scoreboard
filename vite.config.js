@@ -68,7 +68,22 @@ function scoreboardRelayPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [tailwindcss(), svelte(), scoreboardRelayPlugin()],
+  plugins: [
+    tailwindcss(),
+    svelte(),
+    // The relay binds a real port; under test it only prevents a clean exit.
+    ...(process.env.VITEST ? [] : [scoreboardRelayPlugin()]),
+  ],
+
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.test.js'],
+    setupFiles: ['./src/test-setup.js'],
+    // Not localhost: the store only reaches for the dev relay socket when the
+    // page is served locally, and a real connection attempt in tests is noise.
+    environmentOptions: { jsdom: { url: 'https://test.local/' } },
+  },
 
   // Tauri-recommended settings
   clearScreen: false,
