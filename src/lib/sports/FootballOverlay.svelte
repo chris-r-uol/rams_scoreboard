@@ -12,7 +12,7 @@
         <div class="possession-bar" style="background: {state.homeText};"></div>
       {/if}
       <div class="team-inner">
-        <span class="team-name">{state.homeName}</span>
+        {#if state.homeLogo}<img class="team-logo" src={state.homeLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name">{state.homeName}</span>
         <div class="timeout-dots">
           {#each [1, 2, 3] as t}
             <div class="timeout-dot {t <= state.homeTimeouts ? 'active' : ''}" style="background: {state.homeText};"></div>
@@ -43,7 +43,7 @@
             <div class="timeout-dot {t <= state.awayTimeouts ? 'active' : ''}" style="background: {state.awayText};"></div>
           {/each}
         </div>
-        <span class="team-name">{state.awayName}</span>
+        {#if state.awayLogo}<img class="team-logo" src={state.awayLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name">{state.awayName}</span>
       </div>
     </div>
   </div>
@@ -125,5 +125,14 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .team-score { animation: none; }
+  }
+
+  /* Team badge — sits beside the name, sized to the type rather than fixed, so
+     it scales with the overlay. Hidden if the image fails, which matters for
+     externally linked badges whose host may be unreachable at kickoff. */
+  .team-logo {
+    height: 1.9em; width: auto; max-width: 2.6em;
+    object-fit: contain; flex-shrink: 0;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45));
   }
 </style>

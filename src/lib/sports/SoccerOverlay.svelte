@@ -11,7 +11,7 @@
       <div class="team-inner">
         {#key state.homeScore}<span class="team-score">{state.homeScore}</span>{/key}
         <div class="team-info">
-          <span class="team-name">{state.homeName}</span>
+          {#if state.homeLogo}<img class="team-logo" src={state.homeLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name">{state.homeName}</span>
           <div class="card-pips">
             {#each { length: state.homeYellowCards } as _}
               <span class="card-pip yellow">▬</span>
@@ -31,7 +31,7 @@
          style="background: linear-gradient(225deg, {state.awayPrimary} 70%, {state.awaySecondary} 100%); color: {state.awayText};">
       <div class="team-inner away">
         <div class="team-info">
-          <span class="team-name">{state.awayName}</span>
+          {#if state.awayLogo}<img class="team-logo" src={state.awayLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name">{state.awayName}</span>
           <div class="card-pips">
             {#each { length: state.awayYellowCards } as _}
               <span class="card-pip yellow">▬</span>
@@ -92,5 +92,14 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .team-score { animation: none; }
+  }
+
+  /* Team badge — sits beside the name, sized to the type rather than fixed, so
+     it scales with the overlay. Hidden if the image fails, which matters for
+     externally linked badges whose host may be unreachable at kickoff. */
+  .team-logo {
+    height: 1.9em; width: auto; max-width: 2.6em;
+    object-fit: contain; flex-shrink: 0;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45));
   }
 </style>
