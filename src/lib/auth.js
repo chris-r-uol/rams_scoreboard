@@ -51,9 +51,56 @@ export const isSubscribed = derived(
 );
 export const user = derived(session, ($s) => $s?.user ?? null);
 
+// ── Plan ─────────────────────────────────────────────────
+/**
+ * The one sport available without a subscription.
+ *
+ * Ice hockey earns this slot: it exercises nearly every clock the product has
+ * — period clock, two independent penalty timers — so the free tier
+ * demonstrates the hard part of the product rather than a cut-down version of it.
+ */
+export const FREE_SPORT = 'ice-hockey';
+
+/** 'pro' unlocks every sport and removes the overlay watermark. */
+export const plan = derived(isSubscribed, ($subscribed) => ($subscribed ? 'pro' : 'free'));
+
+/** Whether a given sport is playable on the current plan. */
+export function sportAllowedOn(planName, sportId) {
+  return planName === 'pro' || sportId === FREE_SPORT;
+}
+
+/**
+ * Which account state the local dev bypass should simulate.
+ *
+ * The product now behaves differently for signed-out visitors, free accounts
+ * and subscribers, so a bypass pinned to one of them leaves the other two
+ * untestable locally. Switch with, in the console:
+ *
+ *   localStorage.setItem('dev-plan', 'free');  // or 'pro', or 'signed-out'
+ *
+ * Dev-only: the whole bypass is already gated on import.meta.env.DEV plus a
+ * localhost hostname, and is tree-shaken out of production builds.
+ */
+function devPlan() {
+  try {
+    return localStorage.getItem('dev-plan') || 'pro';
+  } catch (_) {
+    return 'pro';
+  }
+}
+
 function applyLocalAuthBypass() {
+  const mode = devPlan();
+
+  if (mode === 'signed-out') {
+    session.set(null);
+    subscriptionStatus.set(null);
+    loading.set(false);
+    return;
+  }
+
   session.set(LOCAL_DEV_SESSION);
-  subscriptionStatus.set('active');
+  subscriptionStatus.set(mode === 'free' ? null : 'active');
   loading.set(false);
 }
 

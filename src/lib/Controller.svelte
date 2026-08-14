@@ -1,7 +1,7 @@
 <script>
   import { onDestroy } from 'svelte';
-  import { scoreboard } from './store.js';
-  import { user } from './auth.js';
+  import { scoreboard, stopAllIntervals } from './store.js';
+  import { user, plan, sportAllowedOn } from './auth.js';
   import { leaveRoom } from './realtime.js';
   import SportPicker from './SportPicker.svelte';
   import FootballController from './sports/FootballController.svelte';
@@ -29,8 +29,37 @@
     if (u?.id) scoreboard.connectRealtime(u.id, 'host');
   });
 
+  let currentPlan = $state(null);
+  const unsubPlan = plan.subscribe((p) => (currentPlan = p));
+
+  // Publish the plan into the broadcast state. The Overlay runs unauthenticated
+  // inside OBS and cannot look this up, so it learns whether to draw the
+  // free-tier watermark from here.
+  //
+  // Written as a reactive correction rather than a one-shot on plan change,
+  // because incoming state can overwrite the field after it is set — the dev
+  // relay replays cached state to every new connection, restored games carry
+  // whatever plan was saved with them. Anything that reintroduces a stale plan
+  // is corrected on the next tick instead of silently persisting.
+  //
+  // This also enforces the free tier's single sport, so a lapsed subscription
+  // or a game restored after downgrading cannot leave a Pro sport running.
+  $effect(() => {
+    if (!currentPlan) return;
+
+    if (state.plan !== currentPlan) {
+      scoreboard.patch({ plan: currentPlan });
+    }
+
+    if (state.sport && !sportAllowedOn(currentPlan, state.sport)) {
+      stopAllIntervals();
+      scoreboard.patch({ sport: null });
+    }
+  });
+
   onDestroy(() => {
     unsubUser();
+    unsubPlan();
     leaveRoom();
   });
 </script>

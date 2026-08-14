@@ -1,6 +1,6 @@
 <script>
   import { scoreboard, stopAllIntervals, gameResumed, undoableReset } from './store.js';
-  import { signOut, user } from './auth.js';
+  import { signOut, user, plan } from './auth.js';
   import { buildOverlayUrl } from './room.js';
   import { realtimeStatus } from './realtime.js';
 
@@ -15,9 +15,12 @@
   let showUrl = $state(false);
   let copyTimer;
 
+  let currentPlan = $state('free');
+
   const unsubs = [
     user.subscribe((u) => { overlayUrl = u?.id ? buildOverlayUrl(u.id) : ''; }),
     realtimeStatus.subscribe((s) => { rtStatus = s; }),
+    plan.subscribe((p) => { currentPlan = p; }),
   ];
 
   import { onDestroy } from 'svelte';
@@ -119,6 +122,13 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           {/if}
         </button>
+
+        {#if currentPlan === 'free'}
+          <a href="#/subscribe" class="btn-upgrade" title="Unlock all sports and remove the watermark">
+            <span class="plan-chip">Free</span>
+            Upgrade
+          </a>
+        {/if}
 
         <div class="header-sep"></div>
 
@@ -337,6 +347,23 @@
   @keyframes rt-pulse {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.35; }
+  }
+
+  /* ── Free plan / upgrade ── */
+  .btn-upgrade {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px 7px 8px; border-radius: 10px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    color: #38bdf8; font-size: 13px; font-weight: 700;
+    text-decoration: none; white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .btn-upgrade:hover { background: rgba(56, 189, 248, 0.2); }
+  .plan-chip {
+    background: #38bdf8; color: #04121c;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+    text-transform: uppercase; padding: 2px 7px; border-radius: 5px;
   }
 
   /* ── Notices (resume / undo) ── */

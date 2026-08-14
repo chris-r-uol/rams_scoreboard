@@ -1,6 +1,11 @@
 <script>
+  import { onDestroy } from 'svelte';
   import { scoreboard, stopAllIntervals } from './store.js';
-  import { signOut } from './auth.js';
+  import { signOut, plan, sportAllowedOn, FREE_SPORT } from './auth.js';
+
+  let currentPlan = $state('free');
+  const unsubPlan = plan.subscribe((p) => (currentPlan = p));
+  onDestroy(unsubPlan);
 
   const sports = [
     {
@@ -62,6 +67,11 @@
   ];
 
   function selectSport(id) {
+    // Locked sports lead to the upgrade page rather than failing silently.
+    if (!sportAllowedOn(currentPlan, id)) {
+      window.location.hash = '#/subscribe';
+      return;
+    }
     stopAllIntervals();
     scoreboard.setSport(id);
   }
@@ -101,25 +111,55 @@
     <p class="text-gray-500 text-lg max-w-lg mx-auto">
       Pick your sport to launch a tailored scoreboard controller with a matching OBS overlay.
     </p>
+
+    {#if currentPlan === 'free'}
+      <div class="free-banner">
+        <div class="free-banner-text">
+          <strong>You're on the free plan.</strong>
+          Ice hockey is yours in full, with a small watermark on the overlay.
+          Upgrade to unlock the other six sports and remove it.
+        </div>
+        <a href="#/subscribe" class="free-banner-cta">View plans</a>
+      </div>
+    {/if}
   </div>
 
   <!-- Sport Grid -->
   <div class="max-w-screen-xl mx-auto px-6 pb-20">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
       {#each sports as sport}
+        {@const unlocked = sportAllowedOn(currentPlan, sport.id)}
+        {@const isFreeSport = currentPlan === 'free' && sport.id === FREE_SPORT}
         <button
           onclick={() => selectSport(sport.id)}
           class="sport-card group text-left"
+          class:sport-locked={!unlocked}
+          class:sport-included={isFreeSport}
           style="--accent: {sport.accent};"
+          aria-label={unlocked ? sport.name : `${sport.name} — upgrade to unlock`}
         >
           <div class="sport-card-inner bg-gradient-to-br {sport.bg}">
-            <div class="sport-emoji">{sport.emoji}</div>
+            <div class="sport-top">
+              <div class="sport-emoji">{sport.emoji}</div>
+              {#if isFreeSport}
+                <span class="tag tag-free">Free</span>
+              {:else if !unlocked}
+                <span class="tag tag-locked">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Pro
+                </span>
+              {/if}
+            </div>
             <h3 class="sport-name">{sport.name}</h3>
             <p class="sport-desc">{sport.description}</p>
             <div class="sport-arrow">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-              </svg>
+              {#if unlocked}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                </svg>
+              {:else}
+                <span class="unlock-hint">Upgrade to unlock</span>
+              {/if}
             </div>
           </div>
         </button>
@@ -210,4 +250,56 @@
     opacity: 1;
     transform: translateX(4px);
   }
+
+  /* ── Plan state ── */
+  .sport-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .tag-free { background: #38bdf8; color: #04121c; }
+  .tag-locked {
+    background: rgba(148, 163, 184, 0.14);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+  }
+
+  /* Locked cards stay legible and clickable — they route to the upgrade page
+     rather than doing nothing, so the lock is an invitation, not a dead end. */
+  .sport-locked .sport-emoji { filter: grayscale(1); opacity: 0.5; }
+  .sport-locked .sport-name  { color: #94a3b8; }
+  .sport-locked .sport-desc  { opacity: 0.62; }
+  .sport-locked:hover { border-color: #475569; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+  .sport-locked:hover .sport-emoji { transform: none; }
+
+  .unlock-hint {
+    font-size: 11px; font-weight: 700; color: #94a3b8;
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+
+  .sport-included { border-color: rgba(56, 189, 248, 0.5); }
+
+  /* ── Free plan banner ── */
+  .free-banner {
+    max-width: 680px; margin: 32px auto 0;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 14px; padding: 16px 20px; text-align: left;
+  }
+  .free-banner-text {
+    flex: 1; min-width: 240px;
+    font-size: 13.5px; line-height: 1.6; color: #cbd5e1;
+  }
+  .free-banner-text strong { color: #f8fafc; font-weight: 700; }
+  .free-banner-cta {
+    background: #38bdf8; color: #04121c;
+    font-size: 13px; font-weight: 700; text-decoration: none;
+    padding: 9px 18px; border-radius: 9px; white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .free-banner-cta:hover { background: #7dd3fc; }
 </style>

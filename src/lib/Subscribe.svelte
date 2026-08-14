@@ -45,12 +45,41 @@
   <div class="w-full max-w-2xl">
 
     <!-- Header -->
-    <div class="text-center mb-12">
-      <span class="text-5xl mb-5 block">🏈</span>
-      <h1 class="text-3xl font-bold text-white tracking-tight">Choose Your Plan</h1>
+    <div class="text-center mb-10">
+      <div class="flex justify-center gap-1.5 text-3xl mb-5">
+        <span>🏒</span><span>🏈</span><span>⚽</span><span>🏀</span><span>⚾</span><span>🏏</span><span>🃏</span>
+      </div>
+      <h1 class="text-3xl font-bold text-white tracking-tight">Unlock all seven sports</h1>
       <p class="text-gray-500 text-sm mt-2.5 tracking-wide">
         Signed in as <span class="text-gray-400">{currentUser?.email ?? '...'}</span>
       </p>
+    </div>
+
+    <!-- What the free plan already covers, so the upgrade is a clear delta -->
+    <div class="mb-8 rounded-xl border border-sky-800/40 bg-sky-950/25 px-5 py-4">
+      <p class="text-sky-300 text-sm font-semibold mb-1.5">You're on the free plan</p>
+      <p class="text-gray-400 text-[13px] leading-relaxed">
+        Ice hockey is yours in full — period clock, power plays, penalty timers, the OBS overlay
+        and real-time sync — with a small watermark on the overlay. Upgrading adds the other six
+        sports and removes the watermark.
+      </p>
+    </div>
+
+    <!-- The six sports an upgrade actually unlocks -->
+    <div class="mb-8 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+      {#each [
+        { emoji: '🏈', name: 'American Football' },
+        { emoji: '⚽', name: 'Soccer' },
+        { emoji: '🏀', name: 'Basketball' },
+        { emoji: '⚾', name: 'Baseball' },
+        { emoji: '🏏', name: 'Cricket' },
+        { emoji: '🃏', name: 'Magic: The Gathering' },
+      ] as s}
+        <div class="flex items-center gap-2.5 rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2.5">
+          <span class="text-lg leading-none">{s.emoji}</span>
+          <span class="text-[12.5px] font-medium text-gray-300 leading-tight">{s.name}</span>
+        </div>
+      {/each}
     </div>
 
     {#if subStatus === 'past_due'}
@@ -71,13 +100,13 @@
         </div>
         <ul class="mt-6 space-y-3 text-sm text-gray-400 flex-1">
           <li class="flex items-center gap-2.5">
-            <span class="text-green-500 text-sm font-bold">✓</span> Full scoreboard controls
+            <span class="text-green-500 text-sm font-bold">✓</span> All seven sports
           </li>
           <li class="flex items-center gap-2.5">
-            <span class="text-green-500 text-sm font-bold">✓</span> OBS browser-source overlay
+            <span class="text-green-500 text-sm font-bold">✓</span> No overlay watermark
           </li>
           <li class="flex items-center gap-2.5">
-            <span class="text-green-500 text-sm font-bold">✓</span> Real-time sync
+            <span class="text-green-500 text-sm font-bold">✓</span> Real-time OBS sync
           </li>
           <li class="flex items-center gap-2.5">
             <span class="text-green-500 text-sm font-bold">✓</span> Cancel anytime

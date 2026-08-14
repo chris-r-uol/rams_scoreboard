@@ -1,9 +1,21 @@
 @import "tailwindcss";
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/*
+ * This reset must live inside `base`.
+ *
+ * Tailwind v4 emits its utilities inside `@layer utilities`, and in the CSS
+ * cascade an *unlayered* rule beats a layered one whatever the specificity. An
+ * unlayered `* { margin: 0; padding: 0 }` therefore silently overrode every
+ * Tailwind spacing utility in the app — `p-8`, `px-3`, `mt-4` and the rest all
+ * computed to 0. Border and colour utilities were unaffected, so the pages
+ * looked deliberate rather than broken.
+ */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 }
 
 html {

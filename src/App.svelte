@@ -5,6 +5,7 @@
   import TermsAndConditions from './lib/TermsAndConditions.svelte';
   import Login from './lib/Login.svelte';
   import Subscribe from './lib/Subscribe.svelte';
+  import Landing from './lib/Landing.svelte';
   import { loading, isAuthenticated, isSubscribed, refreshSubscription } from './lib/auth.js';
   import { parseHash } from './lib/room.js';
 
@@ -51,11 +52,16 @@
     }
   });
 
-  // Determine which view to show for the default/controller route
+  // Determine which view to show for the default route.
+  //
+  // A subscription no longer gates access — it gates *scope*. Signed-in users
+  // without one get the free tier (one sport, watermarked overlay), which is
+  // enforced in the picker and the controller rather than here. Signed-out
+  // visitors get the marketing page instead of a bare login form, so the
+  // product can be understood before it asks for anything.
   function controllerView() {
     if (authLoading) return 'loading';
-    if (!authenticated) return 'login';
-    if (!subscribed) return 'subscribe';
+    if (!authenticated) return 'landing';
     return 'controller';
   }
 </script>
@@ -92,10 +98,8 @@
     <div class="min-h-screen bg-gray-950 flex items-center justify-center">
       <div class="text-gray-500 text-lg">Loading…</div>
     </div>
-  {:else if controllerView() === 'login'}
-    <Login />
-  {:else if controllerView() === 'subscribe'}
-    <Subscribe />
+  {:else if controllerView() === 'landing'}
+    <Landing />
   {:else}
     <Controller />
   {/if}
