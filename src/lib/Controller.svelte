@@ -1,5 +1,8 @@
 <script>
+  import { onDestroy } from 'svelte';
   import { scoreboard } from './store.js';
+  import { user } from './auth.js';
+  import { leaveRoom } from './realtime.js';
   import SportPicker from './SportPicker.svelte';
   import FootballController from './sports/FootballController.svelte';
   import SoccerController from './sports/SoccerController.svelte';
@@ -11,6 +14,17 @@
 
   let state = $state({});
   scoreboard.subscribe((s) => { state = s; });
+
+  // Host the Realtime room for this account so the OBS overlay can subscribe.
+  // The room id is the account id, so the OBS URL never changes between streams.
+  const unsubUser = user.subscribe((u) => {
+    if (u?.id) scoreboard.connectRealtime(u.id, 'host');
+  });
+
+  onDestroy(() => {
+    unsubUser();
+    leaveRoom();
+  });
 </script>
 
 {#if state.sport === null || state.sport === undefined}

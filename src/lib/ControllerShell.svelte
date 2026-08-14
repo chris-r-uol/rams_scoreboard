@@ -1,10 +1,48 @@
 <script>
   import { scoreboard, stopAllIntervals } from './store.js';
-  import { signOut } from './auth.js';
+  import { signOut, user } from './auth.js';
+  import { buildOverlayUrl } from './room.js';
+  import { realtimeStatus } from './realtime.js';
 
   let { sportLabel, sportEmoji, onReset, children } = $props();
 
   let darkMode = $state(localStorage.getItem('theme') !== 'light');
+
+  // ── Overlay URL for OBS ─────────────────────────────────
+  let overlayUrl = $state('');
+  let rtStatus = $state('idle');
+  let copied = $state(false);
+  let showUrl = $state(false);
+  let copyTimer;
+
+  const unsubs = [
+    user.subscribe((u) => { overlayUrl = u?.id ? buildOverlayUrl(u.id) : ''; }),
+    realtimeStatus.subscribe((s) => { rtStatus = s; }),
+  ];
+
+  import { onDestroy } from 'svelte';
+  onDestroy(() => { unsubs.forEach((u) => u()); clearTimeout(copyTimer); });
+
+  const STATUS_LABEL = {
+    connected: 'Overlay link live — OBS can connect',
+    connecting: 'Connecting overlay link…',
+    error: 'Overlay link lost — retrying',
+    unavailable: 'Overlay link unavailable — check configuration',
+    idle: 'Overlay link idle',
+  };
+
+  async function copyOverlayUrl() {
+    if (!overlayUrl) return;
+    try {
+      await navigator.clipboard.writeText(overlayUrl);
+      copied = true;
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => (copied = false), 2000);
+    } catch (_) {
+      // Clipboard blocked — reveal the URL so it can be copied by hand.
+      showUrl = true;
+    }
+  }
 
   function toggleTheme() {
     darkMode = !darkMode;
@@ -62,10 +100,24 @@
           Change Sport
         </button>
 
-        <!-- Open Overlay -->
-        <a href="#/overlay" target="_blank" class="btn-header-overlay">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Open Overlay
+        <!-- Overlay link status -->
+        <span class="rt-dot rt-{rtStatus}" title={STATUS_LABEL[rtStatus] ?? rtStatus}></span>
+
+        <!-- Copy the OBS Browser Source URL -->
+        <button onclick={copyOverlayUrl} class="btn-header-overlay" disabled={!overlayUrl}
+                title="Copy this into an OBS Browser Source">
+          {#if copied}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Copied!
+          {:else}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy OBS URL
+          {/if}
+        </button>
+
+        <!-- Preview the overlay in a normal tab -->
+        <a href={overlayUrl} target="_blank" rel="noopener" class="btn-header-icon" title="Preview overlay in a new tab">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </a>
 
         <!-- Reset Game -->
@@ -86,6 +138,15 @@
   </header>
 
   <div class="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
+
+    {#if showUrl}
+      <div class="url-fallback">
+        <label for="overlay-url">Copy this URL into an OBS Browser Source:</label>
+        <input id="overlay-url" type="text" readonly value={overlayUrl}
+               onfocus={(e) => e.currentTarget.select()} />
+      </div>
+    {/if}
+
     {@render children()}
     <div class="h-10"></div>
   </div>
@@ -197,8 +258,41 @@
     border: 1px solid #1d4ed8; text-decoration: none;
     white-space: nowrap; transition: all 0.15s ease;
   }
-  .btn-header-overlay:hover  { background: #1d4ed8; }
-  .btn-header-overlay:active { transform: scale(0.97); }
+  .btn-header-overlay:hover:not(:disabled)  { background: #1d4ed8; }
+  .btn-header-overlay:active:not(:disabled) { transform: scale(0.97); }
+  .btn-header-overlay:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Overlay link status dot ── */
+  .rt-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; background: var(--c-text-mute);
+    transition: background 0.2s ease;
+  }
+  .rt-connected  { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.7); }
+  .rt-connecting { background: #eab308; animation: rt-pulse 1.2s ease-in-out infinite; }
+  .rt-error,
+  .rt-unavailable { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.7); }
+
+  @keyframes rt-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+  }
+
+  /* ── Clipboard fallback ── */
+  .url-fallback {
+    background: var(--c-bg-card);
+    border: 1px solid var(--c-bd-card);
+    border-radius: 12px; padding: 16px 20px;
+  }
+  .url-fallback label {
+    display: block; margin-bottom: 8px;
+    font-size: 12px; font-weight: 600; color: var(--c-text-sub);
+  }
+  .url-fallback input {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    background: var(--c-bg-input); border: 1px solid var(--c-bd-input);
+    color: var(--c-text-val); font-family: ui-monospace, monospace; font-size: 13px;
+  }
 
   .btn-header-danger {
     display: flex; align-items: center; gap: 7px;

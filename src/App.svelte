@@ -6,8 +6,12 @@
   import Login from './lib/Login.svelte';
   import Subscribe from './lib/Subscribe.svelte';
   import { loading, isAuthenticated, isSubscribed, refreshSubscription } from './lib/auth.js';
+  import { parseHash } from './lib/room.js';
 
-  let route = $state(window.location.hash || '#/');
+  // Route matching uses the hash *path* only — the overlay carries its room id
+  // as a query string inside the hash (`#/overlay?r=…`), which must not defeat
+  // the match.
+  let route = $state(parseHash(window.location.hash).path);
   let authLoading = $state(true);
   let authenticated = $state(false);
   let subscribed = $state(false);
@@ -21,7 +25,7 @@
   onDestroy(() => unsubs.forEach((u) => u()));
 
   function handleHashChange() {
-    route = window.location.hash || '#/';
+    route = parseHash(window.location.hash).path;
   }
 
   $effect(() => {
