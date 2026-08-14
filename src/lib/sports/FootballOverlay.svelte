@@ -18,7 +18,7 @@
             <div class="timeout-dot {t <= state.homeTimeouts ? 'active' : ''}" style="background: {state.homeText};"></div>
           {/each}
         </div>
-        <span class="team-score">{state.homeScore}</span>
+        {#key state.homeScore}<span class="team-score">{state.homeScore}</span>{/key}
       </div>
     </div>
     <div class="center-block">
@@ -37,7 +37,7 @@
         <div class="possession-bar away-bar" style="background: {state.awayText};"></div>
       {/if}
       <div class="team-inner">
-        <span class="team-score">{state.awayScore}</span>
+        {#key state.awayScore}<span class="team-score">{state.awayScore}</span>{/key}
         <div class="timeout-dots">
           {#each [1, 2, 3] as t}
             <div class="timeout-dot {t <= state.awayTimeouts ? 'active' : ''}" style="background: {state.awayText};"></div>
@@ -59,9 +59,15 @@
 
 <style>
   .overlay-root {
-    position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+    position: fixed;
+    inset: var(--sb-inset, auto auto 48px 50%);
+    transform: var(--sb-translate, translateX(-50%)) scale(var(--sb-scale, 1));
+    transform-origin: var(--sb-origin, bottom center);
+    /* Inherited by every digit in the bug, so a clock counting down never
+       shifts width as the numerals change. */
+    font-variant-numeric: tabular-nums;
     display: flex; flex-direction: column; align-items: center; gap: 6px;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
     pointer-events: none; z-index: 9999;
   }
   .scorebug {
@@ -108,4 +114,16 @@
     animation: pulse 1s ease-in-out infinite; box-shadow: 0 2px 12px rgba(234,179,8,0.4);
   }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+  /* A score change is the moment the audience looks up. Four of the seven
+     sports had no motion at all, so scores snapped between values. */
+  .team-score { display: inline-block; animation: score-pop 0.28s ease-out; }
+  @keyframes score-pop {
+    0%   { transform: scale(1.3); }
+    60%  { transform: scale(0.97); }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .team-score { animation: none; }
+  }
 </style>

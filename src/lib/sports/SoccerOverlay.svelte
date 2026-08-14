@@ -9,7 +9,7 @@
     <div class="team-block"
          style="background: linear-gradient(135deg, {state.homePrimary} 70%, {state.homeSecondary} 100%); color: {state.homeText};">
       <div class="team-inner">
-        <span class="team-score">{state.homeScore}</span>
+        {#key state.homeScore}<span class="team-score">{state.homeScore}</span>{/key}
         <div class="team-info">
           <span class="team-name">{state.homeName}</span>
           <div class="card-pips">
@@ -41,7 +41,7 @@
             {/each}
           </div>
         </div>
-        <span class="team-score">{state.awayScore}</span>
+        {#key state.awayScore}<span class="team-score">{state.awayScore}</span>{/key}
       </div>
     </div>
   </div>
@@ -49,9 +49,15 @@
 
 <style>
   .overlay-root {
-    position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+    position: fixed;
+    inset: var(--sb-inset, auto auto 48px 50%);
+    transform: var(--sb-translate, translateX(-50%)) scale(var(--sb-scale, 1));
+    transform-origin: var(--sb-origin, bottom center);
+    /* Inherited by every digit in the bug, so a clock counting down never
+       shifts width as the numerals change. */
+    font-variant-numeric: tabular-nums;
     display: flex; flex-direction: column; align-items: center; gap: 6px;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
     pointer-events: none; z-index: 9999;
   }
   .scorebug {
@@ -75,4 +81,16 @@
   }
   .match-clock { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; }
   .half-label { font-size: 11px; font-weight: 700; color: #9ca3af; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* A score change is the moment the audience looks up. Four of the seven
+     sports had no motion at all, so scores snapped between values. */
+  .team-score { display: inline-block; animation: score-pop 0.28s ease-out; }
+  @keyframes score-pop {
+    0%   { transform: scale(1.3); }
+    60%  { transform: scale(0.97); }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .team-score { animation: none; }
+  }
 </style>

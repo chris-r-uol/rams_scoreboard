@@ -1,6 +1,10 @@
 <script>
   import { scoreboard, stopAllIntervals, gameResumed, undoableReset, undoDepth } from './store.js';
   import { shortcutsFor, matchShortcut } from './shortcuts.js';
+  import {
+    OVERLAY_POSITIONS, positionLabel, clampScale,
+    SCALE_MIN, SCALE_MAX, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE,
+  } from './overlayLayout.js';
   import { signOut, user, plan } from './auth.js';
   import { buildOverlayUrl } from './room.js';
   import { realtimeStatus } from './realtime.js';
@@ -76,7 +80,24 @@
   unsubs.push(gameResumed.subscribe((v) => (resumed = v)));
   unsubs.push(undoableReset.subscribe((v) => (justReset = v)));
   unsubs.push(undoDepth.subscribe((v) => (depth = v)));
-  unsubs.push(scoreboard.subscribe((s) => (sport = s.sport)));
+  // ── Overlay placement ───────────────────────────────────
+  let showOverlaySettings = $state(false);
+  let overlayPosition = $state(DEFAULT_OVERLAY_POSITION);
+  let overlayScale = $state(DEFAULT_OVERLAY_SCALE);
+
+  unsubs.push(scoreboard.subscribe((s) => {
+    sport = s.sport;
+    overlayPosition = s.overlayPosition ?? DEFAULT_OVERLAY_POSITION;
+    overlayScale = s.overlayScale ?? DEFAULT_OVERLAY_SCALE;
+  }));
+
+  function setPosition(p) {
+    scoreboard.patch({ overlayPosition: p });
+  }
+
+  function setScale(v) {
+    scoreboard.patch({ overlayScale: clampScale(v) });
+  }
 
   function requestReset() {
     confirmingReset = true;
@@ -146,6 +167,11 @@
         <button onclick={undoLast} class="btn-header-icon" disabled={depth === 0}
                 title={depth ? `Undo last action (Z) — ${depth} available` : 'Nothing to undo'}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+        </button>
+
+        <!-- Overlay placement -->
+        <button onclick={() => (showOverlaySettings = true)} class="btn-header-icon" title="Overlay size and position">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="6" y="14" width="9" height="4" rx="1"/></svg>
         </button>
 
         <!-- Keyboard shortcuts -->
@@ -242,6 +268,60 @@
     {@render children()}
     <div class="h-10"></div>
   </div>
+
+  <!-- ═════ OVERLAY PLACEMENT ═════ -->
+  {#if showOverlaySettings}
+    <div class="modal-scrim" role="presentation" onclick={() => (showOverlaySettings = false)}>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ov-title"
+           onclick={(e) => e.stopPropagation()}>
+        <div class="keys-head">
+          <h2 id="ov-title" class="modal-title">Overlay size &amp; position</h2>
+          <button onclick={() => (showOverlaySettings = false)} class="btn-modal-cancel">Close</button>
+        </div>
+        <p class="modal-body">
+          Changes appear on your stream straight away. Scale here rather than resizing the
+          Browser Source in OBS — OBS resamples the render and softens the text.
+        </p>
+
+        <div class="ov-field">
+          <span class="ov-label">Position on canvas</span>
+          <div class="ov-grid" role="radiogroup" aria-label="Overlay position">
+            {#each OVERLAY_POSITIONS as p}
+              <button
+                class="ov-cell"
+                class:ov-cell-on={overlayPosition === p}
+                role="radio"
+                aria-checked={overlayPosition === p}
+                aria-label={positionLabel(p)}
+                title={positionLabel(p)}
+                onclick={() => setPosition(p)}
+              ><span class="ov-dot"></span></button>
+            {/each}
+          </div>
+        </div>
+
+        <div class="ov-field">
+          <span class="ov-label">
+            Scale <span class="ov-value">{Math.round(overlayScale * 100)}%</span>
+          </span>
+          <input
+            type="range"
+            min={SCALE_MIN} max={SCALE_MAX} step="0.05"
+            value={overlayScale}
+            oninput={(e) => setScale(e.currentTarget.value)}
+            class="ov-range"
+            aria-label="Overlay scale"
+          />
+          <div class="ov-presets">
+            <button onclick={() => setScale(0.75)} class="ov-preset">75%</button>
+            <button onclick={() => setScale(1)} class="ov-preset">100%</button>
+            <button onclick={() => setScale(1.35)} class="ov-preset">135%</button>
+            <button onclick={() => setScale(1.8)} class="ov-preset">180% (4K)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <!-- ═════ KEYBOARD SHORTCUTS ═════ -->
   {#if showShortcuts}
@@ -531,6 +611,50 @@
     transition: background 0.15s ease;
   }
   .btn-modal-danger:hover { background: #b91c1c; }
+
+  /* ── Overlay placement ── */
+  .ov-field { margin-top: 20px; }
+  .ov-label {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--c-text-mute);
+    margin-bottom: 10px;
+  }
+  .ov-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; letter-spacing: 0; color: var(--c-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A 3x3 map of the canvas — the cell you pick is where the bug sits. */
+  .ov-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 6px; width: 168px;
+    aspect-ratio: 16 / 9;
+  }
+  .ov-cell {
+    display: flex; align-items: center; justify-content: center;
+    background: var(--c-bg-input); border: 1px solid var(--c-bd-input);
+    border-radius: 6px; cursor: pointer; padding: 0;
+    transition: all 0.15s ease;
+  }
+  .ov-cell:hover { border-color: #2563eb; }
+  .ov-dot {
+    width: 14px; height: 5px; border-radius: 2px;
+    background: var(--c-text-mute); transition: background 0.15s ease;
+  }
+  .ov-cell-on { background: rgba(37, 99, 235, 0.18); border-color: #2563eb; }
+  .ov-cell-on .ov-dot { background: #60a5fa; }
+
+  .ov-range { width: 100%; accent-color: #2563eb; cursor: pointer; }
+  .ov-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .ov-preset {
+    padding: 5px 11px; border-radius: 7px;
+    background: var(--c-bg-btn); border: 1px solid var(--c-bd-btn);
+    color: var(--c-text-btn); font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s ease;
+  }
+  .ov-preset:hover { background: var(--c-bg-btn-h); }
 
   /* ── Keyboard shortcuts sheet ── */
   .modal-wide { max-width: 680px; }

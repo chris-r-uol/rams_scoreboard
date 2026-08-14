@@ -143,6 +143,11 @@ const DEFAULT_STATE = {
   // knows whether to render the free-tier watermark.
   plan: 'free',
 
+  // Where the scorebug sits on the OBS canvas, and how large. Broadcast for
+  // the same reason as `plan`. See overlayLayout.js.
+  overlayPosition: 'bottom-center',
+  overlayScale: 1,
+
   // ── Shared team fields ──────────────────────────────
   homeName: 'HOME',
   awayName: 'AWAY',

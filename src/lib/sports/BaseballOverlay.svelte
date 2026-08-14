@@ -60,9 +60,15 @@
 
 <style>
   .overlay-root {
-    position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+    position: fixed;
+    inset: var(--sb-inset, auto auto 48px 50%);
+    transform: var(--sb-translate, translateX(-50%)) scale(var(--sb-scale, 1));
+    transform-origin: var(--sb-origin, bottom center);
+    /* Inherited by every digit in the bug, so a clock counting down never
+       shifts width as the numerals change. */
+    font-variant-numeric: tabular-nums;
     display: flex; flex-direction: column; align-items: center; gap: 4px;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
     pointer-events: none; z-index: 9999;
   }
   .box-score {

@@ -44,7 +44,16 @@ html {
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /*
+   * Inter is now genuinely bundled — see the import in main.js. It previously
+   * led this stack while never being loaded at all, so every user silently
+   * fell through to their OS default and the app rendered in SF Pro on macOS
+   * and Segoe UI on Windows.
+   *
+   * The system stack remains behind it as a real fallback rather than as the
+   * thing that was always doing the work.
+   */
+  font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

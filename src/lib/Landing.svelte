@@ -189,7 +189,7 @@
     background: var(--ground);
     color: var(--ink);
     min-height: 100vh;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
 
   /* ── Nav ── */

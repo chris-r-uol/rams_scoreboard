@@ -181,7 +181,7 @@
   .picker-root {
     background: #030712;
     color: #f9fafb;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', system-ui, -apple-system, sans-serif;
   }
 
   .picker-header {
