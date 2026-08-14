@@ -88,7 +88,7 @@
     <div class="card-header">
       <span class="section-label">Live Overlay Preview</span>
     </div>
-    <div class="bg-[#070c14] rounded-xl p-6 flex justify-center">
+    <div class="preview-stage bg-[#070c14] rounded-xl p-6 flex justify-center">
       <div class="inline-flex gap-6 items-center">
         <!-- Scoreboard -->
         <div class="inline-flex rounded-xl overflow-hidden shadow-2xl">
@@ -136,7 +136,7 @@
   <!-- ══════════════════════════════════════════════════════
        INNING + COUNT + OUTS
   ═══════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-3 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
     <!-- Inning -->
     <div class="card text-center">
@@ -218,7 +218,7 @@
   <!-- ══════════════════════════════════════════════════════
        R/H/E SCOREBOARD
   ═══════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Home R/H/E -->
     <div class="card" style="border-top: 3px solid {state.homePrimary};">

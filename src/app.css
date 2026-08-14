@@ -18,6 +18,27 @@
   }
 }
 
+@layer utilities {
+  /*
+   * The overlay preview renders the real scorebug at its true pixel size, so
+   * it is wider than a phone. Let it scroll inside its own card rather than
+   * being clipped at both edges by the centred flex container.
+   *
+   * Declared in the utilities layer, after the Tailwind import, so it takes
+   * precedence over the `justify-center` utility on the same element.
+   */
+  .preview-stage {
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  @media (min-width: 900px) {
+    .preview-stage {
+      justify-content: center;
+    }
+  }
+}
+
 html {
   scroll-behavior: smooth;
 }

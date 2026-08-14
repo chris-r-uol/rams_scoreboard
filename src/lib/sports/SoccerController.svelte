@@ -75,7 +75,7 @@
         <span class="text-xs text-gray-500">{state.gameClockRunning ? 'Clock running' : 'Clock stopped'}</span>
       </div>
     </div>
-    <div class="bg-[#070c14] rounded-xl p-6 flex justify-center">
+    <div class="preview-stage bg-[#070c14] rounded-xl p-6 flex justify-center">
       <div class="inline-flex items-stretch rounded-xl overflow-hidden shadow-2xl">
         <!-- Home -->
         <div class="flex items-center gap-3 px-6 py-4"
@@ -122,7 +122,7 @@
   <!-- ══════════════════════════════════════════════════════
        CLOCK + HALF
   ═══════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-3 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
     <!-- Match Clock -->
     <div class="card text-center col-span-2">
@@ -163,7 +163,7 @@
   <!-- ══════════════════════════════════════════════════════
        SCORES + CARDS
   ═══════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Home -->
     <div class="card" style="border-top: 3px solid {state.homePrimary};">

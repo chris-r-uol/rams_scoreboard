@@ -89,7 +89,7 @@
     <div class="card-header">
       <span class="section-label">Live Overlay Preview</span>
     </div>
-    <div class="bg-[#070c14] rounded-xl p-6 flex justify-center">
+    <div class="preview-stage bg-[#070c14] rounded-xl p-6 flex justify-center">
       <div class="inline-flex flex-col items-center gap-3">
         <div class="inline-flex items-stretch rounded-xl overflow-hidden shadow-2xl">
           <!-- Batting team -->
@@ -128,7 +128,7 @@
   <!-- ══════════════════════════════════════════════════════
        MAIN CONTROLS
   ═══════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-12 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
     <!-- Batting team selector + Innings -->
     <div class="col-span-3 card text-center">
