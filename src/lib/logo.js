@@ -23,8 +23,14 @@
 /** Badges render small; anything larger is wasted bytes on every broadcast. */
 const MAX_EDGE = 96;
 
+/** Sponsor logos are usually wordmarks, so they need width to stay readable. */
+export const SPONSOR_MAX_EDGE = 240;
+
 /** Hard ceiling on the encoded badge, well inside realtime message limits. */
 const MAX_BYTES = 40 * 1024;
+
+/** Sponsors get more room, but several ride on every heartbeat together. */
+export const SPONSOR_MAX_BYTES = 60 * 1024;
 
 const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
 
@@ -35,7 +41,7 @@ const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/s
  * @returns {Promise<string>} data URL
  * @throws {Error} with a message suitable for showing to the operator
  */
-export async function fileToBadge(file) {
+export async function fileToBadge(file, { maxEdge = MAX_EDGE, maxBytes = MAX_BYTES } = {}) {
   if (!file) throw new Error('No file selected.');
   if (!ACCEPTED.includes(file.type)) {
     throw new Error('That file type is not supported. Use PNG, JPEG, WebP, GIF or SVG.');
@@ -43,7 +49,7 @@ export async function fileToBadge(file) {
 
   const source = await loadImage(await readAsDataUrl(file));
 
-  const scale = Math.min(1, MAX_EDGE / Math.max(source.width, source.height));
+  const scale = Math.min(1, maxEdge / Math.max(source.width, source.height));
   const width = Math.max(1, Math.round(source.width * scale));
   const height = Math.max(1, Math.round(source.height * scale));
 
@@ -60,10 +66,10 @@ export async function fileToBadge(file) {
   let out = canvas.toDataURL('image/webp', 0.92);
   if (!out.startsWith('data:image/webp')) out = canvas.toDataURL('image/png');
 
-  if (byteLength(out) > MAX_BYTES) {
+  if (byteLength(out) > maxBytes) {
     out = canvas.toDataURL('image/webp', 0.7);
   }
-  if (byteLength(out) > MAX_BYTES) {
+  if (byteLength(out) > maxBytes) {
     throw new Error('That image is too detailed to embed. Try a simpler badge, or link to a URL instead.');
   }
 

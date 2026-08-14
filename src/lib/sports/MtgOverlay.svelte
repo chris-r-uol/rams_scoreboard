@@ -166,10 +166,9 @@
 
 <style>
   .overlay-root {
-    position: fixed;
-    inset: var(--sb-inset, auto auto 48px 50%);
-    transform: var(--sb-translate, translateX(-50%)) scale(var(--sb-scale, 1));
-    transform-origin: var(--sb-origin, bottom center);
+    /* Anchoring and scale now live on the stage wrapper (see Overlay.svelte),
+       so the scorebug and any sponsor panel move and scale as one unit. */
+    position: relative;
     /* Inherited by every digit in the bug, so a clock counting down never
        shifts width as the numerals change. */
     font-variant-numeric: tabular-nums;
