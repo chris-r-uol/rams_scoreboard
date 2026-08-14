@@ -10,6 +10,35 @@
 import { writable, derived } from 'svelte/store';
 import { supabase } from './supabase.js';
 
+const AUTH_TIMEOUT_MS = 8000;
+const SUBSCRIPTION_TIMEOUT_MS = 8000;
+const LOCAL_AUTH_BYPASS =
+  import.meta.env.DEV &&
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const LOCAL_DEV_SESSION = {
+  user: {
+    id: 'local-dev-user',
+    email: 'local@dev.local',
+  },
+};
+
+/**
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @param {string} label
+ * @returns {Promise<T>}
+ */
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
 // ── Session store ────────────────────────────────────────
 export const session = writable(null);
 export const loading = writable(true);
@@ -22,23 +51,42 @@ export const isSubscribed = derived(
 );
 export const user = derived(session, ($s) => $s?.user ?? null);
 
+function applyLocalAuthBypass() {
+  session.set(LOCAL_DEV_SESSION);
+  subscriptionStatus.set('active');
+  loading.set(false);
+}
+
 // ── Initialise session on load ───────────────────────────
 async function init() {
+  if (LOCAL_AUTH_BYPASS) {
+    applyLocalAuthBypass();
+    return;
+  }
+
   if (!supabase) {
     loading.set(false);
     return;
   }
+  let currentSession = null;
   try {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    const { data: { session: initialSession } } = await withTimeout(
+      supabase.auth.getSession(),
+      AUTH_TIMEOUT_MS,
+      'Auth session fetch',
+    );
+    currentSession = initialSession;
     session.set(currentSession);
-
-    if (currentSession?.user) {
-      await fetchSubscription(currentSession.user.id);
-    }
   } catch (err) {
     console.error('[auth] Failed to get session:', err);
   } finally {
+    // Never block UI gating on network-heavy calls.
     loading.set(false);
+  }
+
+  // Fetch subscription status in the background so startup cannot hang.
+  if (currentSession?.user) {
+    fetchSubscription(currentSession.user.id);
   }
 
   // Listen for auth state changes (login, logout, token refresh)
@@ -61,14 +109,18 @@ async function init() {
 // ── Subscription lookup ──────────────────────────────────
 async function fetchSubscription(userId) {
   try {
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('status')
-      .eq('user_id', userId)
-      .in('status', ['active', 'trialing', 'past_due'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('subscriptions')
+        .select('status')
+        .eq('user_id', userId)
+        .in('status', ['active', 'trialing', 'past_due'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      SUBSCRIPTION_TIMEOUT_MS,
+      'Subscription fetch',
+    );
 
     if (error) {
       console.error('[auth] Subscription query failed:', error.message);
@@ -87,6 +139,8 @@ async function fetchSubscription(userId) {
 
 /** Sign in with Google via Supabase OAuth */
 export async function signInWithGoogle() {
+  if (LOCAL_AUTH_BYPASS) return;
+
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -101,6 +155,11 @@ export async function signInWithGoogle() {
 
 /** Sign out */
 export async function signOut() {
+  if (LOCAL_AUTH_BYPASS) {
+    applyLocalAuthBypass();
+    return;
+  }
+
   const { error } = await supabase.auth.signOut();
   if (error) {
     console.error('[auth] Sign-out failed:', error.message);
@@ -111,6 +170,10 @@ export async function signOut() {
 
 /** Redirect user to Stripe Checkout via Edge Function */
 export async function startCheckout(priceId) {
+  if (LOCAL_AUTH_BYPASS) {
+    return;
+  }
+
   const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
   if (userError || !currentUser) {
     throw new Error('Session invalid. Please sign out and sign in again.');
@@ -175,6 +238,11 @@ export async function startCheckout(priceId) {
 
 /** Refresh subscription status from database */
 export async function refreshSubscription() {
+  if (LOCAL_AUTH_BYPASS) {
+    subscriptionStatus.set('active');
+    return;
+  }
+
   const { data: { session: currentSession } } = await supabase.auth.getSession();
   if (currentSession?.user) {
     await fetchSubscription(currentSession.user.id);
