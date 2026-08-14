@@ -112,7 +112,7 @@
         <span class="text-xs text-gray-500">{state.gameClockRunning ? 'Clock running' : 'Clock stopped'}</span>
       </div>
     </div>
-    <div class="bg-[#070c14] rounded-xl p-6 flex justify-center">
+    <div class="preview-stage bg-[#070c14] rounded-xl p-6 flex justify-center">
       <div class="inline-flex flex-col items-center gap-2">
         <div class="inline-flex items-stretch rounded-xl overflow-hidden shadow-2xl">
           <div class="flex items-center gap-4 px-7 py-4"
@@ -163,7 +163,7 @@
   <!-- ══════════════════════════════════════════════════════
        CLOCKS + QUARTER
   ═══════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-3 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
     <!-- Game Clock -->
     <div class="card text-center">
@@ -220,7 +220,7 @@
   <!-- ══════════════════════════════════════════════════════
        SCORE + POSSESSION/FLAG + DOWN/DISTANCE/BALL
   ═══════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-12 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
     <!-- Home Score -->
     <div class="col-span-4 card" style="border-top: 3px solid {state.homePrimary};">

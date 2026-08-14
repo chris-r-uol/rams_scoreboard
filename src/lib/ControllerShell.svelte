@@ -1,5 +1,6 @@
 <script>
-  import { scoreboard, stopAllIntervals, gameResumed, undoableReset } from './store.js';
+  import { scoreboard, stopAllIntervals, gameResumed, undoableReset, undoDepth } from './store.js';
+  import { shortcutsFor, matchShortcut } from './shortcuts.js';
   import { signOut, user, plan } from './auth.js';
   import { buildOverlayUrl } from './room.js';
   import { realtimeStatus } from './realtime.js';
@@ -67,30 +68,57 @@
   // live game. It asks first, and stays undoable afterwards.
   let confirmingReset = $state(false);
   let resumed = $state(false);
-  let undoState = $state(null);
+  let justReset = $state(false);
+  let depth = $state(0);
+  let sport = $state(null);
+  let showShortcuts = $state(false);
 
   unsubs.push(gameResumed.subscribe((v) => (resumed = v)));
-  unsubs.push(undoableReset.subscribe((v) => (undoState = v)));
+  unsubs.push(undoableReset.subscribe((v) => (justReset = v)));
+  unsubs.push(undoDepth.subscribe((v) => (depth = v)));
+  unsubs.push(scoreboard.subscribe((s) => (sport = s.sport)));
 
   function requestReset() {
     confirmingReset = true;
   }
 
   function confirmReset() {
-    undoableReset.set(scoreboard.get());
     confirmingReset = false;
     stopAllIntervals();
     onReset?.();
   }
 
-  function undoReset() {
-    if (!undoState) return;
-    scoreboard.set(undoState);
-    undoableReset.set(null);
+  function undoLast() {
+    scoreboard.undo();
   }
 
+  // ── Keyboard ────────────────────────────────────────────
   function handleKeydown(e) {
-    if (e.key === 'Escape' && confirmingReset) confirmingReset = false;
+    if (e.key === 'Escape') {
+      if (showShortcuts) { showShortcuts = false; return; }
+      if (confirmingReset) { confirmingReset = false; return; }
+      return;
+    }
+
+    // A dialog is open: leave the page's shortcuts alone until it is dismissed.
+    if (confirmingReset) return;
+
+    if (e.key === '?' && !isTyping(e.target)) {
+      e.preventDefault();
+      showShortcuts = !showShortcuts;
+      return;
+    }
+
+    const action = matchShortcut(e, sport);
+    if (action) {
+      e.preventDefault();
+      action.run();
+    }
+  }
+
+  function isTyping(el) {
+    const tag = el?.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!el?.isContentEditable;
   }
 </script>
 
@@ -100,7 +128,7 @@
 
   <!-- ═════ HEADER ═════ -->
   <header class="header-bar sticky top-0 z-50">
-    <div class="max-w-screen-2xl mx-auto px-5 py-3 flex items-center gap-4">
+    <div class="header-row max-w-screen-2xl mx-auto px-5 py-3">
 
       <!-- Brand -->
       <div class="flex items-center gap-3 flex-1 min-w-0">
@@ -112,7 +140,18 @@
       </div>
 
       <!-- Actions -->
-      <div class="flex items-center gap-2">
+      <div class="header-actions">
+
+        <!-- Undo -->
+        <button onclick={undoLast} class="btn-header-icon" disabled={depth === 0}
+                title={depth ? `Undo last action (Z) — ${depth} available` : 'Nothing to undo'}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+        </button>
+
+        <!-- Keyboard shortcuts -->
+        <button onclick={() => (showShortcuts = true)} class="btn-header-icon" title="Keyboard shortcuts (?)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>
+        </button>
 
         <!-- Theme toggle -->
         <button onclick={toggleTheme} class="btn-header-icon" title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
@@ -135,7 +174,7 @@
         <!-- Change Sport -->
         <button onclick={handleChangeSport} class="btn-header-sport">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 8 8 12 12 16"/><line x1="16" y1="12" x2="8" y2="12"/></svg>
-          Change Sport
+          <span>Change Sport</span>
         </button>
 
         <!-- Overlay link status -->
@@ -146,10 +185,10 @@
                 title="Copy this into an OBS Browser Source">
           {#if copied}
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            Copied!
+            <span>Copied!</span>
           {:else}
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            Copy OBS URL
+            <span>Copy OBS URL</span>
           {/if}
         </button>
 
@@ -161,7 +200,7 @@
         <!-- Reset Game -->
         <button onclick={requestReset} class="btn-header-danger">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
-          Reset Game
+          <span>Reset Game</span>
         </button>
 
         <div class="header-sep"></div>
@@ -184,11 +223,11 @@
       </div>
     {/if}
 
-    {#if undoState}
+    {#if justReset}
       <div class="notice notice-warn">
         <span>Game reset.</span>
-        <button onclick={undoReset} class="notice-btn">Undo reset</button>
-        <button onclick={() => undoableReset.set(null)} class="notice-btn notice-btn-quiet">Dismiss</button>
+        <button onclick={undoLast} class="notice-btn">Undo reset</button>
+        <button onclick={() => undoableReset.set(false)} class="notice-btn notice-btn-quiet">Dismiss</button>
       </div>
     {/if}
 
@@ -203,6 +242,39 @@
     {@render children()}
     <div class="h-10"></div>
   </div>
+
+  <!-- ═════ KEYBOARD SHORTCUTS ═════ -->
+  {#if showShortcuts}
+    <div class="modal-scrim" role="presentation" onclick={() => (showShortcuts = false)}>
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="keys-title"
+           onclick={(e) => e.stopPropagation()}>
+        <div class="keys-head">
+          <h2 id="keys-title" class="modal-title">Keyboard shortcuts</h2>
+          <button onclick={() => (showShortcuts = false)} class="btn-modal-cancel">Close</button>
+        </div>
+        <p class="modal-body">
+          Home keys sit on the left of the keyboard, away on the right — the same way round as
+          the scorebug. Shortcuts pause while you're typing in a field.
+        </p>
+
+        <div class="keys-groups">
+          {#each shortcutsFor(sport) as group}
+            <div class="keys-group">
+              <h3 class="keys-group-title">{group.group}</h3>
+              {#each group.items as item}
+                <div class="keys-row">
+                  <span class="keys-combo">
+                    {#each item.keys as k}<kbd>{k}</kbd>{/each}
+                  </span>
+                  <span class="keys-label">{item.label}</span>
+                </div>
+              {/each}
+            </div>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <!-- ═════ RESET CONFIRMATION ═════ -->
   {#if confirmingReset}
@@ -292,8 +364,33 @@
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
   }
+  /* The header carries a lot for its width. Below the desktop breakpoint it
+     wraps onto two rows rather than letting the title collide with the
+     controls or push the timeout labels off the edge. */
+  .header-row {
+    display: flex; align-items: center; gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header-actions {
+    display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap;
+  }
+  @media (max-width: 900px) {
+    .header-row { gap: 10px; }
+    .header-actions { width: 100%; justify-content: flex-start; }
+  }
+
   .header-title   { color: var(--c-text); }
   .header-subtitle { color: var(--c-text-mute); }
+
+  @media (max-width: 640px) {
+    .header-title { font-size: 16px; }
+    /* Button labels give way to their icons before the row starts wrapping
+       into an unusable stack. */
+    .btn-header-sport span,
+    .btn-header-overlay span,
+    .btn-header-danger span { display: none; }
+  }
   .header-sep {
     width: 1px; height: 22px;
     background: var(--c-sep);
@@ -434,6 +531,41 @@
     transition: background 0.15s ease;
   }
   .btn-modal-danger:hover { background: #b91c1c; }
+
+  /* ── Keyboard shortcuts sheet ── */
+  .modal-wide { max-width: 680px; }
+  .keys-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; margin-bottom: 10px;
+  }
+  .keys-head .modal-title { margin-bottom: 0; }
+  .keys-groups {
+    display: grid; gap: 22px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .keys-group-title {
+    font-size: 11px; font-weight: 800; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--c-text-mute);
+    margin: 0 0 10px;
+  }
+  .keys-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 5px 0; font-size: 13.5px;
+  }
+  .keys-combo { display: flex; gap: 4px; flex-shrink: 0; min-width: 62px; }
+  .keys-label { color: var(--c-text-sub); line-height: 1.4; }
+
+  kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 24px; height: 24px; padding: 0 7px;
+    background: var(--c-bg-btn); border: 1px solid var(--c-bd-btn);
+    border-bottom-width: 2px; border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; font-weight: 700; color: var(--c-text-btn);
+  }
+
+  .btn-header-icon:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-header-icon:disabled:hover { background: transparent; border-color: transparent; }
 
   /* ── Clipboard fallback ── */
   .url-fallback {
