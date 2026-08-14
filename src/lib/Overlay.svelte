@@ -70,3 +70,34 @@
 {:else if state.sport === 'mtg'}
   <MtgOverlay />
 {/if}
+
+<!--
+  Free-tier watermark. Deliberately small and low-contrast: it should be a
+  visible reason to upgrade without making the free tier unusable on a real
+  stream, because a free tier nobody can broadcast with converts nobody.
+
+  The plan travels in the broadcast state, so it is client-controlled and could
+  be edited out by a determined user. Enforcing it properly needs the value
+  signed server-side; that is a deliberate trade for now.
+-->
+{#if room && state.sport && state.plan === 'free'}
+  <div class="watermark">Stream Your Score</div>
+{/if}
+
+<style>
+  .watermark {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.62);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+</style>

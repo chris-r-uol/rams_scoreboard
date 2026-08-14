@@ -132,6 +132,11 @@ const DEFAULT_STATE = {
   // Sport selection
   sport: null, // null = not yet chosen
 
+  // Plan of the account hosting this scoreboard. Broadcast so the Overlay —
+  // which runs unauthenticated inside OBS and cannot look this up itself —
+  // knows whether to render the free-tier watermark.
+  plan: 'free',
+
   // ── Shared team fields ──────────────────────────────
   homeName: 'HOME',
   awayName: 'AWAY',
