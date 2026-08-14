@@ -15,6 +15,14 @@
   let state = $state({});
   scoreboard.subscribe((s) => { state = s; });
 
+  // This client drives the clocks and owns the saved copy of the game.
+  scoreboard.becomeController();
+
+  // Recover an in-progress game before going on air. Without this, a refresh
+  // or crash mid-match resets to defaults and pushes those defaults out to the
+  // overlay, blanking the scoreboard live.
+  scoreboard.restorePersisted();
+
   // Host the Realtime room for this account so the OBS overlay can subscribe.
   // The room id is the account id, so the OBS URL never changes between streams.
   const unsubUser = user.subscribe((u) => {
