@@ -1,19 +1,26 @@
 /**
- * Scoreboard state store — multi-sport, dual-sync: BroadcastChannel + optional WebSocket.
+ * Scoreboard state store — multi-sport, tri-sync.
  *
- * SYNC STRATEGY:
+ * SYNC STRATEGY (all three run simultaneously; each covers a different gap):
  *
  *   BroadcastChannel  — always active; syncs between any tabs/windows sharing
  *                       the same browser process.  Covers the common case of
  *                       Controller and Overlay both open in Chrome/Safari.
  *
- *   WebSocket relay   — optional; connects to ws://localhost:5199 when a relay
- *                       is running.  Required for OBS Browser Source (OBS runs
- *                       a separate Chromium process that cannot receive
- *                       BroadcastChannel messages).
- *                       Start the relay with:  node relay.js
+ *   Supabase Realtime — the transport that works for the hosted build.  An OBS
+ *                       Browser Source is a separate Chromium process on a
+ *                       possibly different machine, so this is the only channel
+ *                       that reaches it over the network.  Requires a room id;
+ *                       see room.js and realtime.js.
  *
- * Every outgoing state change is sent on both channels simultaneously.
+ *   WebSocket relay   — local only; connects to ws://localhost:5199 when the
+ *                       page is itself served from localhost (Tauri desktop app
+ *                       or `npm run dev`).  Deliberately NOT attempted on the
+ *                       hosted build: an insecure ws:// socket from an HTTPS
+ *                       page is blocked as mixed content in Safari and Firefox,
+ *                       and would otherwise retry forever in the background.
+ *
+ * Every outgoing state change is sent on all available channels.
  * Incoming messages are applied silently (no re-broadcast) to avoid loops.
  *
  * CLOCK ARCHITECTURE:
@@ -22,9 +29,18 @@
  */
 
 import { writable, get } from 'svelte/store';
+import { joinRoom, sendState, sendStateNow } from './realtime.js';
 
 const WS_URL = 'ws://localhost:5199';
 const BC_CHANNEL = 'scoreboard-sync';
+
+// The localhost relay only exists when the app is served locally.
+const IS_LOCAL_HOST =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+// How often the Controller re-sends full state as a late-join safety net.
+const HEARTBEAT_MS = 5000;
 
 // ── Default state ────────────────────────────────────────
 const DEFAULT_STATE = {
@@ -255,7 +271,40 @@ function createScoreboardStore() {
 
   // Start trying the WebSocket — silently retries in the background.
   // If no relay is running this is harmless; BroadcastChannel still works.
-  connect();
+  // Skipped entirely on the hosted build, where the relay cannot exist.
+  if (IS_LOCAL_HOST) connect();
+
+  // ── Supabase Realtime ───────────────────────────────────
+  let heartbeatTimer = null;
+
+  /**
+   * Join the Realtime room for this scoreboard.
+   *
+   * @param {string} roomId  account id — see room.js
+   * @param {'host'|'viewer'} role  Controller hosts, Overlay views
+   */
+  function connectRealtime(roomId, role) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+
+    joinRoom(roomId, {
+      role,
+      // Viewer: apply incoming state silently, then mirror it onto the
+      // BroadcastChannel so any same-browser overlay tabs stay in sync too.
+      onState: (incoming) => {
+        set(incoming);
+        bc?.postMessage({ type: 'state-update', state: incoming });
+      },
+      // Host: a viewer just joined and needs a snapshot immediately.
+      onStateRequest: () => sendStateNow(get({ subscribe })),
+    });
+
+    // Host: re-send full state periodically so an overlay that missed the
+    // handshake (or a controller that reloaded) converges within a few seconds.
+    if (role === 'host') {
+      heartbeatTimer = setInterval(() => sendState(get({ subscribe })), HEARTBEAT_MS);
+    }
+  }
 
   function broadcast(state) {
     // Always send on BroadcastChannel
@@ -264,11 +313,14 @@ function createScoreboardStore() {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'state-update', state }));
     }
+    // Also send over Supabase Realtime (coalesced; no-op unless hosting a room)
+    sendState(state);
   }
 
   // ── Public API ────────────────────────────────────────
   return {
     subscribe,
+    connectRealtime,
     set(newState) {
       set(newState);
       broadcast(newState);
