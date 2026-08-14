@@ -63,11 +63,24 @@ export function getTokenFromUrl() {
   return parseHash(window.location.hash).params.get(TOKEN_PARAM) || null;
 }
 
-/** Build the pairing URL to open on a phone. */
+/** Build the pairing URL to open on a phone — the compact remote. */
 export function buildRemoteUrl(token) {
   if (typeof window === 'undefined' || !token) return '';
   const { origin, pathname } = window.location;
   return `${origin}${pathname}#/remote?${TOKEN_PARAM}=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Build the pairing URL for a full co-controller on another computer.
+ *
+ * Same token as the phone remote: both are write access to the same game, so
+ * splitting them into separate secrets would imply a distinction that does not
+ * exist while doubling what has to be rotated when one leaks.
+ */
+export function buildJoinUrl(token) {
+  if (typeof window === 'undefined' || !token) return '';
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#/join?${TOKEN_PARAM}=${encodeURIComponent(token)}`;
 }
 
 /**
