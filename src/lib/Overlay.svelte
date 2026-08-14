@@ -106,7 +106,7 @@
     bottom: 14px;
     left: 50%;
     transform: translateX(-50%);
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.14em;

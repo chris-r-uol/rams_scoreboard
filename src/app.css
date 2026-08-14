@@ -45,17 +45,15 @@ html {
 
 body {
   /*
-   * `Inter` used to lead this stack but was never loaded — no @font-face, no
-   * stylesheet link, no bundled file — so every user silently fell through to
-   * their OS default. Naming a font the app does not ship is worse than not
-   * naming one: it reads as a decision while behaving as a fallback.
+   * Inter is now genuinely bundled — see the import in main.js. It previously
+   * led this stack while never being loaded at all, so every user silently
+   * fell through to their OS default and the app rendered in SF Pro on macOS
+   * and Segoe UI on Windows.
    *
-   * The stack below is what was actually rendering all along, stated honestly.
-   * Bundling a real face is still worth doing for the overlay in particular,
-   * where output currently differs between macOS and Windows — that needs a
-   * font file committed to the repo and self-hosted via @font-face.
+   * The system stack remains behind it as a real fallback rather than as the
+   * thing that was always doing the work.
    */
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

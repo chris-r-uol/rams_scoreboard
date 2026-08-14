@@ -67,7 +67,7 @@
        shifts width as the numerals change. */
     font-variant-numeric: tabular-nums;
     display: flex; flex-direction: column; align-items: center; gap: 6px;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
     pointer-events: none; z-index: 9999;
   }
   .scorebug {
