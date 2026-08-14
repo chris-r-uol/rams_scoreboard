@@ -8,7 +8,7 @@
   import Landing from './lib/Landing.svelte';
   import Remote from './lib/Remote.svelte';
   import { loading, isAuthenticated, isSubscribed, refreshSubscription } from './lib/auth.js';
-  import { parseHash } from './lib/room.js';
+  import { parseHash, getTokenFromUrl } from './lib/room.js';
 
   // Route matching uses the hash *path* only — the overlay carries its room id
   // as a query string inside the hash (`#/overlay?r=…`), which must not defeat
@@ -70,6 +70,20 @@
 <!-- Public routes: always accessible -->
 {#if route === '#/overlay'}
   <Overlay />
+{:else if route === '#/join'}
+  <!-- Co-controller: the full controller on a second device. Public like the
+       overlay and remote, because a helper's laptop has no session of its own —
+       access is gated by the pairing token, not by login. -->
+  {#if getTokenFromUrl()}
+    <Controller followerToken={getTokenFromUrl()} />
+  {:else}
+    <div class="min-h-screen bg-gray-950 flex items-center justify-center px-6 text-center">
+      <div class="text-gray-400 max-w-sm leading-relaxed">
+        <p class="text-lg font-semibold text-gray-200 mb-2">No scoreboard paired</p>
+        <p class="text-sm">Open the co-controller link from the main controller — it needs to include a token.</p>
+      </div>
+    </div>
+  {/if}
 {:else if route === '#/remote'}
   <!-- Public like the overlay: a phone has no session. Access is gated by the
        pairing token in the URL, not by login. -->

@@ -1,12 +1,12 @@
 <script>
-  import { scoreboard, stopAllIntervals, gameResumed, undoableReset, undoDepth } from './store.js';
+  import { scoreboard, stopAllIntervals, gameResumed, undoableReset, undoDepth, followerMode } from './store.js';
   import { shortcutsFor, matchShortcut } from './shortcuts.js';
   import {
     OVERLAY_POSITIONS, positionLabel, clampScale,
     SCALE_MIN, SCALE_MAX, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE,
   } from './overlayLayout.js';
   import { signOut, user, plan } from './auth.js';
-  import { buildOverlayUrl, buildRemoteUrl, getRemoteToken, rotateRemoteToken } from './room.js';
+  import { buildOverlayUrl, buildRemoteUrl, buildJoinUrl, getRemoteToken, rotateRemoteToken } from './room.js';
   import { realtimeStatus } from './realtime.js';
 
   let { sportLabel, sportEmoji, onReset, children } = $props();
@@ -20,12 +20,16 @@
   let showUrl = $state(false);
   let copyTimer;
 
-  let currentPlan = $state('free');
+  // A co-controller has no session, so it takes the plan from the host's
+  // broadcast state rather than from auth. On the host the two agree.
+  let currentPlan = $state(null);
+  let isFollower = $state(false);
 
   const unsubs = [
     user.subscribe((u) => { overlayUrl = u?.id ? buildOverlayUrl(u.id) : ''; }),
     realtimeStatus.subscribe((s) => { rtStatus = s; }),
-    plan.subscribe((p) => { currentPlan = p; }),
+    plan.subscribe((p) => { if (!isFollower) currentPlan = p; }),
+    followerMode.subscribe((v) => { isFollower = v; }),
   ];
 
   import { onDestroy } from 'svelte';
@@ -87,6 +91,7 @@
 
   unsubs.push(scoreboard.subscribe((s) => {
     sport = s.sport;
+    if (isFollower) currentPlan = s.plan ?? null;
     overlayPosition = s.overlayPosition ?? DEFAULT_OVERLAY_POSITION;
     overlayScale = s.overlayScale ?? DEFAULT_OVERLAY_SCALE;
   }));
@@ -102,23 +107,26 @@
   // ── Phone remote pairing ────────────────────────────────
   let showRemote = $state(false);
   let remoteUrl = $state(buildRemoteUrl(getRemoteToken()));
-  let remoteCopied = $state(false);
+  let joinUrl = $state(buildJoinUrl(getRemoteToken()));
+  let copiedLink = $state('');
   let remoteCopyTimer;
 
-  async function copyRemoteUrl() {
+  async function copyLink(which, url) {
     try {
-      await navigator.clipboard.writeText(remoteUrl);
-      remoteCopied = true;
+      await navigator.clipboard.writeText(url);
+      copiedLink = which;
       clearTimeout(remoteCopyTimer);
-      remoteCopyTimer = setTimeout(() => (remoteCopied = false), 2000);
+      remoteCopyTimer = setTimeout(() => (copiedLink = ''), 2000);
     } catch (_) {
-      // Clipboard blocked — the input below is selectable.
+      // Clipboard blocked — the inputs are selectable.
     }
   }
 
   function regenerateRemote() {
-    remoteUrl = buildRemoteUrl(rotateRemoteToken());
-    remoteCopied = false;
+    const t = rotateRemoteToken();
+    remoteUrl = buildRemoteUrl(t);
+    joinUrl = buildJoinUrl(t);
+    copiedLink = '';
     // The controller has to rejoin under the new token, which drops any phone
     // paired on the old one — which is the point of regenerating.
     window.location.reload();
@@ -189,15 +197,17 @@
       <div class="header-actions">
 
         <!-- Undo -->
-        <button onclick={undoLast} class="btn-header-icon" disabled={depth === 0}
-                title={depth ? `Undo last action (Z) — ${depth} available` : 'Nothing to undo'}>
+        <button onclick={undoLast} class="btn-header-icon" disabled={!isFollower && depth === 0}
+                title={isFollower ? 'Undo last action (Z)' : (depth ? `Undo last action (Z) — ${depth} available` : 'Nothing to undo')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
         </button>
 
-        <!-- Phone remote -->
+        <!-- Phone remote — the owner hands these links out, not a paired device -->
+        {#if !isFollower}
         <button onclick={() => (showRemote = true)} class="btn-header-icon" title="Use a phone as a second controller">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
         </button>
+        {/if}
 
         <!-- Overlay placement -->
         <button onclick={() => (showOverlaySettings = true)} class="btn-header-icon" title="Overlay size and position">
@@ -233,6 +243,7 @@
           <span>Change Sport</span>
         </button>
 
+        {#if !isFollower}
         <!-- Overlay link status -->
         <span class="rt-dot rt-{rtStatus}" title={STATUS_LABEL[rtStatus] ?? rtStatus}></span>
 
@@ -253,6 +264,8 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </a>
 
+        {/if}
+
         <!-- Reset Game -->
         <button onclick={requestReset} class="btn-header-danger">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
@@ -261,10 +274,12 @@
 
         <div class="header-sep"></div>
 
-        <!-- Sign out -->
+        <!-- Sign out — a co-controller has no session of its own -->
+        {#if !isFollower}
         <button onclick={handleSignOut} class="btn-header-icon" title="Sign out">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </button>
+        {/if}
 
       </div>
     </div>
@@ -315,21 +330,33 @@
         </p>
 
         <div class="ov-field">
-          <span class="ov-label">Pairing link</span>
+          <span class="ov-label">Phone remote — big buttons for the common actions</span>
           <input class="rm-url" type="text" readonly value={remoteUrl}
                  onfocus={(e) => e.currentTarget.select()} aria-label="Phone remote pairing link" />
           <div class="ov-presets">
-            <button onclick={copyRemoteUrl} class="ov-preset">
-              {remoteCopied ? 'Copied!' : 'Copy link'}
+            <button onclick={() => copyLink('remote', remoteUrl)} class="ov-preset">
+              {copiedLink === 'remote' ? 'Copied!' : 'Copy phone link'}
             </button>
-            <button onclick={regenerateRemote} class="ov-preset">Regenerate</button>
+          </div>
+        </div>
+
+        <div class="ov-field">
+          <span class="ov-label">Co-controller — the full controller on another computer</span>
+          <input class="rm-url" type="text" readonly value={joinUrl}
+                 onfocus={(e) => e.currentTarget.select()} aria-label="Co-controller pairing link" />
+          <div class="ov-presets">
+            <button onclick={() => copyLink('join', joinUrl)} class="ov-preset">
+              {copiedLink === 'join' ? 'Copied!' : 'Copy co-controller link'}
+            </button>
+            <button onclick={regenerateRemote} class="ov-preset">Regenerate both</button>
           </div>
         </div>
 
         <p class="rm-warn">
-          Treat this link like a key — anyone who opens it can change the scoreboard.
-          It is deliberately different from your OBS overlay URL, so sharing that one
-          gives away nothing. Regenerating unpairs every phone immediately.
+          Treat these links like keys — anyone who opens one can change the scoreboard.
+          They are deliberately different from your OBS overlay URL, so sharing that one
+          gives away nothing. This device stays in charge of the game; paired devices
+          send their changes here. Regenerating unpairs everything immediately.
         </p>
       </div>
     </div>

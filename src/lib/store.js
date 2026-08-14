@@ -98,6 +98,12 @@ const UNDO_LIMIT = 40;
 /** Number of undoable steps available, for enabling UI. */
 export const undoDepth = writable(0);
 
+/**
+ * True on a co-controller: a second device running the full controller against
+ * someone else's game. It shows the same controls but owns none of the state.
+ */
+export const followerMode = writable(false);
+
 /** Re-anchor any clock whose seconds or running flag this patch touches. */
 function withClockAnchors(current, partial) {
   const next = { ...partial };
@@ -618,7 +624,60 @@ function createScoreboardStore() {
     return true;
   }
 
+  // ── Follower mode ───────────────────────────────────────
+  //
+  // A second device running the full controller. It does not own the game: it
+  // mirrors the host's state and forwards every change upstream, so there is
+  // still exactly one source of truth and nothing to reconcile afterwards.
+  //
+  // Mutations are intercepted here rather than in the seven sport controllers,
+  // which call update() with a function 38 times over. A function cannot be
+  // sent across the wire, so a follower applies it to its mirrored state,
+  // diffs the result, and sends the changed fields as an ordinary patch.
+  /** @type {null | ((msg: object) => void)} */
+  let forwardToHost = null;
+
+  function setFollowerTransport(send) {
+    forwardToHost = send;
+    followerMode.set(!!send);
+  }
+
+  /** Apply state from the host. Never re-broadcast, never forward. */
+  function applyHostState(state, sentAt) {
+    applyIncoming(state, sentAt);
+  }
+
+  /** Fields that differ between two states. */
+  function changedFields(before, after) {
+    const out = {};
+    for (const key of Object.keys(after)) {
+      if (!Object.is(before[key], after[key])) out[key] = after[key];
+    }
+    return out;
+  }
+
+  /**
+   * Apply a follower's own change locally, then forward it.
+   *
+   * The local application is not cosmetic. Changes are computed from the
+   * mirrored state and sent as absolute values, so without it two taps landing
+   * inside one network round trip both compute from the same starting value and
+   * the second silently overwrites the first — tapping +1 twice quickly would
+   * score one goal, not two.
+   *
+   * The host remains authoritative: its echo overwrites whatever was assumed
+   * here, so a rejected or adjusted change corrects itself within a round trip.
+   */
+  function applyLocallyAndForward(current, partial) {
+    set({ ...current, ...withClockAnchors(current, partial) });
+    forwardToHost({ kind: 'patch', patch: partial });
+  }
+
   function publicPatch(partial) {
+    if (forwardToHost) {
+      applyLocallyAndForward(get({ subscribe }), partial);
+      return;
+    }
     update((current) => {
       recordUndo(current);
       const next = { ...current, ...withClockAnchors(current, partial) };
@@ -653,9 +712,20 @@ function createScoreboardStore() {
       skewSamples = [];
     },
 
-    undo,
+    setFollowerTransport,
+    applyHostState,
+
+    undo() {
+      if (forwardToHost) return forwardToHost({ kind: 'call', method: 'undo' });
+      return undo();
+    },
 
     set(newState) {
+      if (forwardToHost) {
+        const current = get({ subscribe });
+        applyLocallyAndForward(current, changedFields(current, newState));
+        return;
+      }
       update((current) => {
         recordUndo(current);
         const next = anchorAll(newState);
@@ -664,6 +734,12 @@ function createScoreboardStore() {
       });
     },
     update(fn) {
+      if (forwardToHost) {
+        // Apply against the mirrored state, then send only what it changed.
+        const current = get({ subscribe });
+        applyLocallyAndForward(current, changedFields(current, fn(current)));
+        return;
+      }
       update((current) => {
         recordUndo(current);
         const next = anchorAll(fn(current));
@@ -673,6 +749,7 @@ function createScoreboardStore() {
     },
     patch: publicPatch,
     reset() {
+      if (forwardToHost) return forwardToHost({ kind: 'call', method: 'reset' });
       update((current) => {
         recordUndo(current);
         const fresh = anchorAll({ ...DEFAULT_STATE });
@@ -683,6 +760,7 @@ function createScoreboardStore() {
     },
     // Reset to sport-specific defaults, preserving team names/colours
     resetSport(sport) {
+      if (forwardToHost) return forwardToHost({ kind: 'call', method: 'resetSport', args: [sport] });
       update((current) => {
         recordUndo(current);
         undoableReset.set(true);
@@ -697,6 +775,7 @@ function createScoreboardStore() {
       });
     },
     setSport(sport) {
+      if (forwardToHost) return forwardToHost({ kind: 'call', method: 'setSport', args: [sport] });
       update((current) => {
         recordUndo(current);
         const defaults = SPORT_DEFAULTS[sport] ?? {};

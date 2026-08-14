@@ -3,7 +3,7 @@
   import { scoreboard, stopAllIntervals } from './store.js';
   import { user, plan, sportAllowedOn } from './auth.js';
   import {
-    leaveRoom, joinControlChannel, leaveControlChannel, sendControlState,
+    leaveRoom, joinControlChannel, leaveControlChannel, sendControlState, sendCommand,
   } from './realtime.js';
   import { getRemoteToken } from './room.js';
   import { runCommand } from './shortcuts.js';
@@ -16,40 +16,90 @@
   import CricketController from './sports/CricketController.svelte';
   import MtgController from './sports/MtgController.svelte';
 
+  /**
+   * `followerToken` set means this is a co-controller: a second device showing
+   * the full controller for someone else's game. It renders the same UI but
+   * owns none of the state — every change is forwarded to the host, so there
+   * is still one source of truth and nothing to reconcile.
+   */
+  let { followerToken = null } = $props();
+  const isFollower = !!followerToken;
+
   let state = $state({});
   scoreboard.subscribe((s) => { state = s; });
 
-  // This client drives the clocks and owns the saved copy of the game.
-  scoreboard.becomeController();
+  let unsubUser = () => {};
+  let unsubPlan = () => {};
 
-  // Recover an in-progress game before going on air. Without this, a refresh
-  // or crash mid-match resets to defaults and pushes those defaults out to the
-  // overlay, blanking the scoreboard live.
-  scoreboard.restorePersisted();
-
-  // Host the Realtime room for this account so the OBS overlay can subscribe.
-  // The room id is the account id, so the OBS URL never changes between streams.
-  const unsubUser = user.subscribe((u) => {
-    if (u?.id) scoreboard.connectRealtime(u.id, 'host');
-  });
-
+  // null until the subscription resolves — "not known yet", never "free".
   let currentPlan = $state(null);
-  const unsubPlan = plan.subscribe((p) => (currentPlan = p));
 
-  // Publish the plan into the broadcast state. The Overlay runs unauthenticated
-  // inside OBS and cannot look this up, so it learns whether to draw the
-  // free-tier watermark from here.
+  if (isFollower) {
+    // ── Co-controller ─────────────────────────────────────
+    // Mirrors the host and forwards every change to it. Deliberately does not
+    // become the clock authority or persist anything: two devices each
+    // deciding when a clock hits zero, or each saving its own copy, is exactly
+    // the divergence this design exists to avoid.
+    scoreboard.setFollowerTransport((msg) => sendCommand(msg));
+
+    joinControlChannel(followerToken, {
+      role: 'remote',
+      onState: (incoming, sentAt) => scoreboard.applyHostState(incoming, sentAt),
+    });
+  } else {
+    // ── Host ──────────────────────────────────────────────
+    // Drives the clocks and owns the saved copy of the game.
+    scoreboard.becomeController();
+
+    // Recover an in-progress game before going on air. Without this, a refresh
+    // or crash mid-match resets to defaults and pushes those defaults out to
+    // the overlay, blanking the scoreboard live.
+    scoreboard.restorePersisted();
+
+    // Host the Realtime room so the OBS overlay can subscribe. The room id is
+    // the account id, so the OBS URL never changes between streams.
+    unsubUser = user.subscribe((u) => {
+      if (u?.id) scoreboard.connectRealtime(u.id, 'host');
+    });
+
+    unsubPlan = plan.subscribe((p) => (currentPlan = p));
+
+    // Accept changes from paired devices. Phone remotes send named action ids,
+    // resolved against this sport's own list. Co-controllers send patches and a
+    // small set of named calls. Nothing else is honoured, so a paired device
+    // cannot write arbitrary fields it was never offered.
+    joinControlChannel(getRemoteToken(), {
+      role: 'host',
+      onCommand: (msg = {}) => {
+        const current = scoreboard.get();
+
+        if (msg.kind === 'patch' && msg.patch && typeof msg.patch === 'object') {
+          scoreboard.patch(msg.patch);
+        } else if (msg.kind === 'call') {
+          const ALLOWED = ['undo', 'reset', 'resetSport', 'setSport'];
+          if (ALLOWED.includes(msg.method)) {
+            scoreboard[msg.method](...(Array.isArray(msg.args) ? msg.args : []));
+          }
+        } else if (msg.id && current.sport) {
+          runCommand(current.sport, msg.id);
+        }
+
+        sendControlState(scoreboard.get());
+      },
+      onRemoteJoined: () => sendControlState(scoreboard.get()),
+    });
+  }
+
+  // Host only: publish the plan into broadcast state, since the Overlay runs
+  // unauthenticated inside OBS and cannot look it up. A co-controller has no
+  // session of its own and must never assert a plan — it inherits the host's.
   //
-  // Written as a reactive correction rather than a one-shot on plan change,
-  // because incoming state can overwrite the field after it is set — the dev
-  // relay replays cached state to every new connection, restored games carry
-  // whatever plan was saved with them. Anything that reintroduces a stale plan
-  // is corrected on the next tick instead of silently persisting.
-  //
-  // This also enforces the free tier's single sport, so a lapsed subscription
-  // or a game restored after downgrading cannot leave a Pro sport running.
+  // Written as a reactive correction rather than a one-shot, because incoming
+  // state can overwrite the field afterwards. `currentPlan` stays null until
+  // the subscription resolves, and null means wait: assuming free before the
+  // answer arrives wiped a Pro user's sport on every reload.
   $effect(() => {
-    if (!currentPlan) return;
+    if (isFollower || !currentPlan) return;
 
     if (state.plan !== currentPlan) {
       scoreboard.patch({ plan: currentPlan });
@@ -61,29 +111,16 @@
     }
   });
 
-  // ── Phone remote ────────────────────────────────────────
-  // Commands arrive as action ids and are resolved against this sport's own
-  // list, so a paired phone can only trigger things the controller already
-  // offers rather than writing arbitrary state.
-  joinControlChannel(getRemoteToken(), {
-    role: 'host',
-    onCommand: ({ id } = {}) => {
-      const current = scoreboard.get();
-      if (!current.sport || !id) return;
-      if (runCommand(current.sport, id)) sendControlState(scoreboard.get());
-    },
-    onRemoteJoined: () => sendControlState(scoreboard.get()),
-  });
-
-  // Mirror state to any paired phone. Clock movement is applied silently on
-  // every client, so this only fires on real changes — not once a second.
+  // Host: mirror state to paired devices. Clock movement is applied silently on
+  // every client, so this fires on real changes rather than once a second.
   $effect(() => {
-    sendControlState(state);
+    if (!isFollower) sendControlState(state);
   });
 
   onDestroy(() => {
     unsubUser();
     unsubPlan();
+    if (isFollower) scoreboard.setFollowerTransport(null);
     leaveRoom();
     leaveControlChannel();
   });
