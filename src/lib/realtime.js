@@ -60,7 +60,9 @@ function flush() {
   const state = pendingState;
   pendingState = null;
   lastSentAt = Date.now();
-  rawSend('state', { state });
+  // Stamped at send time, not queue time, so the receiver's clock-skew estimate
+  // is not skewed by however long this sat in the throttle window.
+  rawSend('state', { state, sentAt: Date.now() });
 }
 
 /**
@@ -88,7 +90,7 @@ export function sendStateNow(state) {
     flushTimer = null;
   }
   lastSentAt = Date.now();
-  rawSend('state', { state });
+  rawSend('state', { state, sentAt: Date.now() });
 }
 
 /**
@@ -97,7 +99,7 @@ export function sendStateNow(state) {
  * @param {string} roomId
  * @param {object} opts
  * @param {'host'|'viewer'} opts.role
- * @param {(state: object) => void} [opts.onState]     viewer: incoming state
+ * @param {(state: object, sentAt?: number) => void} [opts.onState] viewer: incoming state
  * @param {() => void} [opts.onStateRequest]           host: a viewer wants a snapshot
  */
 export function joinRoom(roomId, { role, onState, onStateRequest } = {}) {
@@ -124,7 +126,7 @@ export function joinRoom(roomId, { role, onState, onStateRequest } = {}) {
 
   if (role === 'viewer') {
     channel.on('broadcast', { event: 'state' }, ({ payload }) => {
-      if (payload?.state) onState?.(payload.state);
+      if (payload?.state) onState?.(payload.state, payload.sentAt);
     });
   }
 

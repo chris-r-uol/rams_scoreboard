@@ -42,6 +42,91 @@ const IS_LOCAL_HOST =
 // How often the Controller re-sends full state as a late-join safety net.
 const HEARTBEAT_MS = 5000;
 
+// How often every client recomputes running clocks from their anchors.
+const PROJECT_MS = 250;
+
+// Persisted game state is only restored if it is fresher than this — resuming
+// last week's match on a cold open would be worse than starting clean.
+const PERSIST_KEY = 'scoreboard-state-v1';
+const PERSIST_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+/**
+ * Every clock in the app, described uniformly.
+ *
+ * `seconds` is what the UI renders and what every sport component already
+ * reads. It is now a *derived* value: the source of truth is the anchor pair
+ * (wall-clock ms + seconds remaining at that instant), from which the displayed
+ * value is recomputed continuously.
+ *
+ * Counting interval fires instead — the previous approach — loses time whenever
+ * a timer is delayed, and Chrome throttles timers on a hidden tab to roughly
+ * once per minute after five minutes. A backgrounded controller (an operator
+ * switching to OBS) would leave the clock minutes behind with nothing to
+ * indicate it. Deriving from wall time makes that self-correcting.
+ */
+const CLOCKS = [
+  {
+    seconds: 'gameClockSeconds',
+    running: 'gameClockRunning',
+    anchorMs: 'gameClockAnchorMs',
+    anchorSeconds: 'gameClockAnchorSeconds',
+    direction: 'gameClockDirection',
+    max: 5999,
+  },
+  { seconds: 'playClockSeconds', running: 'playClockRunning', anchorMs: 'playClockAnchorMs', anchorSeconds: 'playClockAnchorSeconds' },
+  { seconds: 'shotClockSeconds', running: 'shotClockRunning', anchorMs: 'shotClockAnchorMs', anchorSeconds: 'shotClockAnchorSeconds' },
+  { seconds: 'homePenaltySeconds', running: 'homePenaltyRunning', anchorMs: 'homePenaltyAnchorMs', anchorSeconds: 'homePenaltyAnchorSeconds' },
+  { seconds: 'awayPenaltySeconds', running: 'awayPenaltyRunning', anchorMs: 'awayPenaltyAnchorMs', anchorSeconds: 'awayPenaltyAnchorSeconds' },
+];
+
+/**
+ * Offset between this client's clock and the controller's, measured from the
+ * timestamp carried on each broadcast. Without it, an overlay on a second
+ * machine would project every clock off by that machine's clock skew.
+ */
+let hostClockSkewMs = 0;
+
+/** True when the Controller recovered an in-progress game on load. */
+export const gameResumed = writable(false);
+
+/** Holds the pre-reset game so a mis-clicked "Reset Game" is recoverable. */
+export const undoableReset = writable(null);
+
+/** Re-anchor any clock whose seconds or running flag this patch touches. */
+function withClockAnchors(current, partial) {
+  const next = { ...partial };
+  const now = Date.now();
+
+  for (const c of CLOCKS) {
+    const touchesSeconds = c.seconds in partial;
+    const touchesRunning = c.running in partial;
+    if (!touchesSeconds && !touchesRunning) continue;
+
+    next[c.anchorMs] = now;
+    next[c.anchorSeconds] = touchesSeconds ? partial[c.seconds] : current[c.seconds];
+  }
+
+  return next;
+}
+
+/**
+ * Displayed seconds for a clock at a given instant, or null if it is not
+ * running or has no anchor yet.
+ */
+function projectClock(c, state, hostNow) {
+  if (!state[c.running] || state[c.anchorMs] == null) return null;
+
+  const elapsed = Math.floor((hostNow - state[c.anchorMs]) / 1000);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return null;
+
+  const countingUp = c.direction && state[c.direction] === 'up';
+  const raw = countingUp
+    ? state[c.anchorSeconds] + elapsed
+    : state[c.anchorSeconds] - elapsed;
+
+  return countingUp ? Math.min(raw, c.max ?? 359999) : Math.max(0, raw);
+}
+
 // ── Default state ────────────────────────────────────────
 const DEFAULT_STATE = {
   // Sport selection
@@ -60,11 +145,17 @@ const DEFAULT_STATE = {
   awayText: '#FFFFFF',
 
   // ── Clock infrastructure ────────────────────────────
+  // *Seconds fields are derived for display; *AnchorMs / *AnchorSeconds are
+  // the source of truth. See CLOCKS above.
   gameClockSeconds: 900,
   gameClockRunning: false,
   gameClockDirection: 'down', // 'down' or 'up'
+  gameClockAnchorMs: null,
+  gameClockAnchorSeconds: 900,
   playClockSeconds: 40,
   playClockRunning: false,
+  playClockAnchorMs: null,
+  playClockAnchorSeconds: 40,
 
   // ── American Football ───────────────────────────────
   possession: 'home',
@@ -90,10 +181,16 @@ const DEFAULT_STATE = {
   awayPenaltySeconds: 0,
   homePenaltyRunning: false,
   awayPenaltyRunning: false,
+  homePenaltyAnchorMs: null,
+  homePenaltyAnchorSeconds: 0,
+  awayPenaltyAnchorMs: null,
+  awayPenaltyAnchorSeconds: 0,
 
   // ── Basketball ──────────────────────────────────────
   shotClockSeconds: 24,
   shotClockRunning: false,
+  shotClockAnchorMs: null,
+  shotClockAnchorSeconds: 24,
   homeFouls: 0,
   awayFouls: 0,
 
@@ -220,6 +317,40 @@ const SPORT_DEFAULTS = {
 function createScoreboardStore() {
   const { subscribe, set, update } = writable({ ...DEFAULT_STATE });
 
+  // True on the Controller: this client drives the clocks, owns the saved copy
+  // of the game, and acts as the reference clock for skew.
+  let isController = false;
+
+  // Rolling window of observed send→receive offsets, used to estimate how far
+  // this machine's clock runs ahead of the controller's.
+  let skewSamples = [];
+
+  /**
+   * Record a clock-skew sample from an incoming message.
+   *
+   * Takes the *minimum* recent offset rather than the latest. Some messages are
+   * replays rather than live sends — the dev relay caches the last state and
+   * replays it to every new connection, and the heartbeat re-sends state that
+   * may be seconds old. Those carry an inflated offset that would otherwise be
+   * mistaken for skew and shift every clock by that amount. A replay can only
+   * ever be later than a live send, never earlier, so the minimum converges on
+   * true skew plus one network hop.
+   */
+  function noteSkew(sentAt) {
+    // The Controller is the reference clock; it never adjusts to anyone.
+    if (isController || typeof sentAt !== 'number') return;
+
+    skewSamples.push(Date.now() - sentAt);
+    if (skewSamples.length > 12) skewSamples.shift();
+    hostClockSkewMs = Math.min(...skewSamples);
+  }
+
+  /** Apply state received from another client. */
+  function applyIncoming(state, sentAt) {
+    noteSkew(sentAt);
+    set(state);
+  }
+
   // ── BroadcastChannel ────────────────────────────────────
   let bc = null;
   try {
@@ -227,7 +358,7 @@ function createScoreboardStore() {
     bc.addEventListener('message', (event) => {
       try {
         const msg = event.data;
-        if (msg?.type === 'state-update') set(msg.state);
+        if (msg?.type === 'state-update') applyIncoming(msg.state, msg.sentAt);
       } catch (_) {}
     });
   } catch (_) {
@@ -254,8 +385,8 @@ function createScoreboardStore() {
         // Apply incoming state — never re-broadcast on WS to avoid loops.
         // The BroadcastChannel is also notified so same-browser tabs stay in sync.
         if (msg.type === 'state-update') {
-          set(msg.state);
-          bc?.postMessage({ type: 'state-update', state: msg.state });
+          applyIncoming(msg.state, msg.sentAt);
+          bc?.postMessage(msg);
         }
       } catch (_) {}
     });
@@ -291,9 +422,9 @@ function createScoreboardStore() {
       role,
       // Viewer: apply incoming state silently, then mirror it onto the
       // BroadcastChannel so any same-browser overlay tabs stay in sync too.
-      onState: (incoming) => {
-        set(incoming);
-        bc?.postMessage({ type: 'state-update', state: incoming });
+      onState: (incoming, sentAt) => {
+        applyIncoming(incoming, sentAt);
+        bc?.postMessage({ type: 'state-update', state: incoming, sentAt });
       },
       // Host: a viewer just joined and needs a snapshot immediately.
       onStateRequest: () => sendStateNow(get({ subscribe })),
@@ -307,40 +438,164 @@ function createScoreboardStore() {
   }
 
   function broadcast(state) {
+    const msg = { type: 'state-update', state, sentAt: Date.now() };
     // Always send on BroadcastChannel
-    bc?.postMessage({ type: 'state-update', state });
+    bc?.postMessage(msg);
     // Also send on WebSocket if relay is connected
     if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'state-update', state }));
+      ws.send(JSON.stringify(msg));
     }
     // Also send over Supabase Realtime (coalesced; no-op unless hosting a room)
     sendState(state);
+    persist(state);
+  }
+
+  // ── Persistence ─────────────────────────────────────────
+  // Only the Controller persists. An overlay writing its own copy would let a
+  // stale snapshot outlive the game it belongs to.
+  let persistEnabled = false;
+
+  function persist(state) {
+    if (!persistEnabled) return;
+    try {
+      localStorage.setItem(PERSIST_KEY, JSON.stringify({ savedAt: Date.now(), state }));
+    } catch (_) {
+      // Storage full or blocked — persistence is a safety net, never a hard dependency.
+    }
+  }
+
+  /**
+   * Restore a recent in-progress game, if one exists.
+   * @returns {boolean} whether anything was restored
+   */
+  function restorePersisted() {
+    try {
+      const raw = localStorage.getItem(PERSIST_KEY);
+      if (!raw) return false;
+
+      const { savedAt, state } = JSON.parse(raw);
+      if (!state?.sport) return false;
+      if (!savedAt || Date.now() - savedAt > PERSIST_MAX_AGE_MS) return false;
+
+      // Clocks never resume running on their own — a clock that restarted
+      // itself during a reload would silently run on while nobody was watching.
+      const revived = { ...DEFAULT_STATE, ...state };
+      for (const c of CLOCKS) {
+        revived[c.running] = false;
+        revived[c.anchorMs] = null;
+        revived[c.anchorSeconds] = revived[c.seconds];
+      }
+
+      set(revived);
+      broadcast(revived);
+      gameResumed.set(true);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function clearPersisted() {
+    try {
+      localStorage.removeItem(PERSIST_KEY);
+    } catch (_) {}
+  }
+
+  // ── Clock projection ────────────────────────────────────
+  // Runs on every client. The Controller additionally owns stopping a clock
+  // when it reaches zero, so an overlay never fights it for authority.
+  let projectorTimer = null;
+
+  function projectTick() {
+    const current = get({ subscribe });
+    const hostNow = Date.now() - hostClockSkewMs;
+
+    let displayPatch = null;
+    let expiredPatch = null;
+
+    for (const c of CLOCKS) {
+      const projected = projectClock(c, current, hostNow);
+      if (projected === null || projected === current[c.seconds]) continue;
+
+      const countingUp = c.direction && current[c.direction] === 'up';
+      if (!countingUp && projected <= 0 && isController) {
+        // Reaching zero is a real state change: broadcast it.
+        expiredPatch = { ...(expiredPatch ?? {}), [c.seconds]: 0, [c.running]: false };
+      } else {
+        displayPatch = { ...(displayPatch ?? {}), [c.seconds]: projected };
+      }
+    }
+
+    // Display-only movement is applied silently — every client derives the same
+    // value from the same anchor, so re-broadcasting each second would be pure
+    // traffic for no additional information.
+    if (displayPatch) set({ ...get({ subscribe }), ...displayPatch });
+    if (expiredPatch) publicPatch(expiredPatch);
+  }
+
+  function startProjector() {
+    if (projectorTimer) return;
+    projectorTimer = setInterval(projectTick, PROJECT_MS);
+  }
+  startProjector();
+
+  // A tab returning to the foreground has potentially missed many projections.
+  // Recompute immediately rather than waiting for the next interval.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') projectTick();
+    });
+  }
+
+  function publicPatch(partial) {
+    update((current) => {
+      const next = { ...current, ...withClockAnchors(current, partial) };
+      broadcast(next);
+      return next;
+    });
+  }
+
+  /** Re-anchor every clock to its current seconds value. */
+  function anchorAll(state) {
+    const now = Date.now();
+    const next = { ...state };
+    for (const c of CLOCKS) {
+      next[c.anchorMs] = now;
+      next[c.anchorSeconds] = next[c.seconds];
+    }
+    return next;
   }
 
   // ── Public API ────────────────────────────────────────
   return {
     subscribe,
     connectRealtime,
+    restorePersisted,
+    clearPersisted,
+
+    /** Mark this client as the Controller: owns clock expiry and persistence. */
+    becomeController() {
+      isController = true;
+      persistEnabled = true;
+      hostClockSkewMs = 0;
+      skewSamples = [];
+    },
+
     set(newState) {
-      set(newState);
-      broadcast(newState);
+      const next = anchorAll(newState);
+      set(next);
+      broadcast(next);
     },
     update(fn) {
       update((current) => {
-        const next = fn(current);
+        const next = anchorAll(fn(current));
         broadcast(next);
         return next;
       });
     },
-    patch(partial) {
-      update((current) => {
-        const next = { ...current, ...partial };
-        broadcast(next);
-        return next;
-      });
-    },
+    patch: publicPatch,
     reset() {
-      const fresh = { ...DEFAULT_STATE };
+      const fresh = anchorAll({ ...DEFAULT_STATE });
       set(fresh);
       broadcast(fresh);
     },
@@ -348,11 +603,11 @@ function createScoreboardStore() {
     resetSport(sport) {
       update((current) => {
         const defaults = SPORT_DEFAULTS[sport] ?? {};
-        const next = {
+        const next = anchorAll({
           ...current,
           ...defaults,
           sport,
-        };
+        });
         broadcast(next);
         return next;
       });
@@ -360,7 +615,7 @@ function createScoreboardStore() {
     setSport(sport) {
       update((current) => {
         const defaults = SPORT_DEFAULTS[sport] ?? {};
-        const next = {
+        const next = anchorAll({
           ...current,
           ...defaults,
           sport,
@@ -368,7 +623,7 @@ function createScoreboardStore() {
           ...(sport === 'mtg' && current.mtgFormat === 'commander'
             ? { homeLife: 40, awayLife: 40, player3Life: 40, player4Life: 40 }
             : {}),
-        };
+        });
         broadcast(next);
         return next;
       });
@@ -381,142 +636,44 @@ function createScoreboardStore() {
 
 export const scoreboard = createScoreboardStore();
 
-// ── Clock leader logic ───────────────────────────────────
-// Intervals are started/stopped explicitly by the Controller only.
-// Every tick calls scoreboard.patch() which broadcasts over WebSocket,
-// so the Overlay receives each second without running its own timer.
+// ── Clock lifecycle ──────────────────────────────────────
+// Timing is no longer driven by per-clock intervals. A clock advances because
+// wall time passes, and every client projects it from its anchor (see CLOCKS).
+//
+// These functions are retained because all seven sport controllers call them
+// around clock changes. They no longer own timing — starting and stopping is
+// expressed purely through the `*Running` flags those controllers already
+// patch — but `stopAllIntervals` remains meaningful: it halts every clock at
+// once, which is what "Reset Game" and "Change Sport" need.
 
-let gameClockInterval = null;
-let playClockInterval = null;
-let shotClockInterval = null;
-let homePenaltyInterval = null;
-let awayPenaltyInterval = null;
-
-function tickGameClock() {
+function stopClocks(clocks) {
   const s = scoreboard.get();
-  if (!s.gameClockRunning) return;
-  if (s.gameClockDirection === 'up') {
-    scoreboard.patch({ gameClockSeconds: s.gameClockSeconds + 1 });
-  } else {
-    if (s.gameClockSeconds <= 0) {
-      scoreboard.patch({ gameClockRunning: false, gameClockSeconds: 0 });
-      stopGameClockInterval();
-      return;
-    }
-    scoreboard.patch({ gameClockSeconds: s.gameClockSeconds - 1 });
+  const patch = {};
+  for (const c of clocks) {
+    if (s[c.running]) patch[c.running] = false;
   }
+  if (Object.keys(patch).length) scoreboard.patch(patch);
 }
 
-function tickPlayClock() {
-  const s = scoreboard.get();
-  if (!s.playClockRunning) return;
-  if (s.playClockSeconds <= 0) {
-    scoreboard.patch({ playClockRunning: false, playClockSeconds: 0 });
-    stopPlayClockInterval();
-    return;
-  }
-  scoreboard.patch({ playClockSeconds: s.playClockSeconds - 1 });
-}
+const byField = (field) => CLOCKS.filter((c) => c.running === field);
 
-function tickShotClock() {
-  const s = scoreboard.get();
-  if (!s.shotClockRunning) return;
-  if (s.shotClockSeconds <= 0) {
-    scoreboard.patch({ shotClockRunning: false, shotClockSeconds: 0 });
-    stopShotClockInterval();
-    return;
-  }
-  scoreboard.patch({ shotClockSeconds: s.shotClockSeconds - 1 });
-}
+export function startGameClockInterval() {}
+export function stopGameClockInterval() { stopClocks(byField('gameClockRunning')); }
 
-function tickHomePenalty() {
-  const s = scoreboard.get();
-  if (!s.homePenaltyRunning) return;
-  if (s.homePenaltySeconds <= 0) {
-    scoreboard.patch({ homePenaltyRunning: false, homePenaltySeconds: 0 });
-    stopHomePenaltyInterval();
-    return;
-  }
-  scoreboard.patch({ homePenaltySeconds: s.homePenaltySeconds - 1 });
-}
+export function startPlayClockInterval() {}
+export function stopPlayClockInterval() { stopClocks(byField('playClockRunning')); }
 
-function tickAwayPenalty() {
-  const s = scoreboard.get();
-  if (!s.awayPenaltyRunning) return;
-  if (s.awayPenaltySeconds <= 0) {
-    scoreboard.patch({ awayPenaltyRunning: false, awayPenaltySeconds: 0 });
-    stopAwayPenaltyInterval();
-    return;
-  }
-  scoreboard.patch({ awayPenaltySeconds: s.awayPenaltySeconds - 1 });
-}
+export function startShotClockInterval() {}
+export function stopShotClockInterval() { stopClocks(byField('shotClockRunning')); }
 
-export function startGameClockInterval() {
-  if (gameClockInterval) return;
-  gameClockInterval = setInterval(tickGameClock, 1000);
-}
+export function startHomePenaltyInterval() {}
+export function stopHomePenaltyInterval() { stopClocks(byField('homePenaltyRunning')); }
 
-export function stopGameClockInterval() {
-  if (gameClockInterval) {
-    clearInterval(gameClockInterval);
-    gameClockInterval = null;
-  }
-}
-
-export function startPlayClockInterval() {
-  if (playClockInterval) return;
-  playClockInterval = setInterval(tickPlayClock, 1000);
-}
-
-export function stopPlayClockInterval() {
-  if (playClockInterval) {
-    clearInterval(playClockInterval);
-    playClockInterval = null;
-  }
-}
-
-export function startShotClockInterval() {
-  if (shotClockInterval) return;
-  shotClockInterval = setInterval(tickShotClock, 1000);
-}
-
-export function stopShotClockInterval() {
-  if (shotClockInterval) {
-    clearInterval(shotClockInterval);
-    shotClockInterval = null;
-  }
-}
-
-export function startHomePenaltyInterval() {
-  if (homePenaltyInterval) return;
-  homePenaltyInterval = setInterval(tickHomePenalty, 1000);
-}
-
-export function stopHomePenaltyInterval() {
-  if (homePenaltyInterval) {
-    clearInterval(homePenaltyInterval);
-    homePenaltyInterval = null;
-  }
-}
-
-export function startAwayPenaltyInterval() {
-  if (awayPenaltyInterval) return;
-  awayPenaltyInterval = setInterval(tickAwayPenalty, 1000);
-}
-
-export function stopAwayPenaltyInterval() {
-  if (awayPenaltyInterval) {
-    clearInterval(awayPenaltyInterval);
-    awayPenaltyInterval = null;
-  }
-}
+export function startAwayPenaltyInterval() {}
+export function stopAwayPenaltyInterval() { stopClocks(byField('awayPenaltyRunning')); }
 
 export function stopAllIntervals() {
-  stopGameClockInterval();
-  stopPlayClockInterval();
-  stopShotClockInterval();
-  stopHomePenaltyInterval();
-  stopAwayPenaltyInterval();
+  stopClocks(CLOCKS);
 }
 
 // ── Helpers ──────────────────────────────────────────────
