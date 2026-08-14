@@ -1,5 +1,5 @@
 <script>
-  import { scoreboard, stopAllIntervals } from './store.js';
+  import { scoreboard, stopAllIntervals, gameResumed, undoableReset } from './store.js';
   import { signOut, user } from './auth.js';
   import { buildOverlayUrl } from './room.js';
   import { realtimeStatus } from './realtime.js';
@@ -59,11 +59,39 @@
     scoreboard.patch({ sport: null });
   }
 
-  function handleReset() {
+  // ── Reset, confirmed and reversible ─────────────────────
+  // Reset sits in the header beside controls used during setup, and wipes a
+  // live game. It asks first, and stays undoable afterwards.
+  let confirmingReset = $state(false);
+  let resumed = $state(false);
+  let undoState = $state(null);
+
+  unsubs.push(gameResumed.subscribe((v) => (resumed = v)));
+  unsubs.push(undoableReset.subscribe((v) => (undoState = v)));
+
+  function requestReset() {
+    confirmingReset = true;
+  }
+
+  function confirmReset() {
+    undoableReset.set(scoreboard.get());
+    confirmingReset = false;
     stopAllIntervals();
     onReset?.();
   }
+
+  function undoReset() {
+    if (!undoState) return;
+    scoreboard.set(undoState);
+    undoableReset.set(null);
+  }
+
+  function handleKeydown(e) {
+    if (e.key === 'Escape' && confirmingReset) confirmingReset = false;
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="controller-root min-h-screen select-none" data-theme={darkMode ? 'dark' : 'light'}>
 
@@ -121,7 +149,7 @@
         </a>
 
         <!-- Reset Game -->
-        <button onclick={handleReset} class="btn-header-danger">
+        <button onclick={requestReset} class="btn-header-danger">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
           Reset Game
         </button>
@@ -139,6 +167,21 @@
 
   <div class="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
 
+    {#if resumed}
+      <div class="notice notice-info">
+        <span>Resumed your game in progress — check the clock before you go on air.</span>
+        <button onclick={() => gameResumed.set(false)} class="notice-btn">Dismiss</button>
+      </div>
+    {/if}
+
+    {#if undoState}
+      <div class="notice notice-warn">
+        <span>Game reset.</span>
+        <button onclick={undoReset} class="notice-btn">Undo reset</button>
+        <button onclick={() => undoableReset.set(null)} class="notice-btn notice-btn-quiet">Dismiss</button>
+      </div>
+    {/if}
+
     {#if showUrl}
       <div class="url-fallback">
         <label for="overlay-url">Copy this URL into an OBS Browser Source:</label>
@@ -150,6 +193,24 @@
     {@render children()}
     <div class="h-10"></div>
   </div>
+
+  <!-- ═════ RESET CONFIRMATION ═════ -->
+  {#if confirmingReset}
+    <div class="modal-scrim" role="presentation" onclick={() => (confirmingReset = false)}>
+      <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="reset-title"
+           onclick={(e) => e.stopPropagation()}>
+        <h2 id="reset-title" class="modal-title">Reset this game?</h2>
+        <p class="modal-body">
+          Scores, clocks and timeouts all return to their starting values, and the change
+          appears on your overlay immediately. You'll be able to undo this.
+        </p>
+        <div class="modal-actions">
+          <button onclick={() => (confirmingReset = false)} class="btn-modal-cancel">Cancel</button>
+          <button onclick={confirmReset} class="btn-modal-danger">Reset game</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <!-- ═════ FOOTER ═════ -->
   <footer class="border-t border-gray-800/60 py-6 text-center">
@@ -277,6 +338,75 @@
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.35; }
   }
+
+  /* ── Notices (resume / undo) ── */
+  .notice {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 18px; border-radius: 12px;
+    font-size: 13px; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .notice-info {
+    background: rgba(37, 99, 235, 0.12);
+    border-color: rgba(37, 99, 235, 0.35);
+    color: #93c5fd;
+  }
+  .notice-warn {
+    background: rgba(217, 119, 6, 0.12);
+    border-color: rgba(217, 119, 6, 0.35);
+    color: #fcd34d;
+  }
+  .notice span { flex: 1; min-width: 200px; }
+  .notice-btn {
+    padding: 5px 12px; border-radius: 7px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: inherit; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s ease; white-space: nowrap;
+  }
+  .notice-btn:hover { background: rgba(255, 255, 255, 0.18); }
+  .notice-btn-quiet { background: transparent; border-color: transparent; opacity: 0.75; }
+
+  /* ── Reset confirmation ── */
+  .modal-scrim {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(3, 7, 18, 0.72);
+    backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal {
+    background: var(--c-bg-card);
+    border: 1px solid var(--c-bd-card);
+    border-radius: 16px;
+    padding: 26px;
+    max-width: 440px; width: 100%;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  }
+  .modal-title {
+    margin: 0 0 10px; font-size: 19px; font-weight: 700;
+    color: var(--c-text); letter-spacing: -0.01em;
+  }
+  .modal-body {
+    margin: 0 0 22px; font-size: 14px; line-height: 1.6;
+    color: var(--c-text-sub);
+  }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn-modal-cancel {
+    padding: 9px 18px; border-radius: 10px;
+    background: var(--c-bg-btn); color: var(--c-text-btn);
+    border: 1px solid var(--c-bd-btn);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .btn-modal-cancel:hover { background: var(--c-bg-btn-h); }
+  .btn-modal-danger {
+    padding: 9px 18px; border-radius: 10px;
+    background: #dc2626; color: #fff; border: 1px solid #b91c1c;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .btn-modal-danger:hover { background: #b91c1c; }
 
   /* ── Clipboard fallback ── */
   .url-fallback {
