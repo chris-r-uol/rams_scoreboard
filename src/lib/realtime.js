@@ -156,6 +156,116 @@ export function joinRoom(roomId, { role, onState, onStateRequest } = {}) {
   });
 }
 
+// ── Control channel ──────────────────────────────────────
+//
+// A second, independent channel carrying commands from a phone remote to the
+// Controller.
+//
+// Deliberately NOT the state channel. That one is named by account id, which
+// travels in the OBS overlay URL — anyone who has ever been given that URL can
+// join it. Carrying commands there would silently turn "here's my overlay link"
+// into "here is control of my scoreboard". The control channel is keyed by a
+// secret that appears only on the pairing link the operator chooses to share.
+
+const CONTROL_PREFIX = 'scoreboard-ctl';
+
+/** @type {'idle'|'connecting'|'connected'|'error'|'unavailable'} */
+export const controlStatus = writable('idle');
+
+let controlChannel = null;
+let controlConnected = false;
+let controlRole = null;
+
+function controlSend(event, payload) {
+  if (!controlChannel || !controlConnected) return;
+  try {
+    controlChannel.send({ type: 'broadcast', event, payload });
+  } catch (err) {
+    console.error('[realtime] Control send failed:', err);
+  }
+}
+
+/**
+ * Join the control channel.
+ *
+ * @param {string} token       pairing secret — never derived from the room id
+ * @param {object} opts
+ * @param {'host'|'remote'} opts.role
+ * @param {(command: object) => void} [opts.onCommand]  host: a remote pressed something
+ * @param {(state: object) => void} [opts.onState]      remote: current scoreboard
+ * @param {() => void} [opts.onRemoteJoined]            host: send a snapshot
+ */
+export function joinControlChannel(token, { role, onCommand, onState, onRemoteJoined } = {}) {
+  if (!supabase || !token) {
+    controlStatus.set('unavailable');
+    return;
+  }
+  if (controlChannel && controlRole === role) return;
+
+  leaveControlChannel();
+  controlRole = role;
+  controlStatus.set('connecting');
+
+  controlChannel = supabase.channel(`${CONTROL_PREFIX}:${token}`, {
+    config: { broadcast: { self: false } },
+  });
+
+  if (role === 'host') {
+    controlChannel.on('broadcast', { event: 'command' }, ({ payload }) => {
+      if (payload) onCommand?.(payload);
+    });
+    controlChannel.on('broadcast', { event: 'remote-hello' }, () => onRemoteJoined?.());
+  }
+
+  if (role === 'remote') {
+    controlChannel.on('broadcast', { event: 'state' }, ({ payload }) => {
+      if (payload?.state) onState?.(payload.state);
+    });
+  }
+
+  controlChannel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      controlConnected = true;
+      controlStatus.set('connected');
+      // Announce so the Controller pushes a snapshot; without it the remote
+      // shows nothing until the operator happens to change something.
+      if (role === 'remote') controlSend('remote-hello', {});
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      controlConnected = false;
+      controlStatus.set('error');
+    } else if (status === 'CLOSED') {
+      controlConnected = false;
+      controlStatus.set('idle');
+    }
+  });
+}
+
+/** Remote → Controller: request an action. */
+export function sendCommand(command) {
+  if (controlRole !== 'remote') return;
+  controlSend('command', command);
+}
+
+/** Controller → remote: mirror current state so the remote can display it. */
+export function sendControlState(state) {
+  if (controlRole !== 'host') return;
+  controlSend('state', { state });
+}
+
+export function leaveControlChannel() {
+  if (controlChannel) {
+    try {
+      supabase?.removeChannel(controlChannel);
+    } catch (_) {
+      // Already torn down.
+    }
+  }
+  controlChannel = null;
+  controlConnected = false;
+  controlRole = null;
+  controlStatus.set('idle');
+}
+
 /** Leave the current room and reset transport state. */
 export function leaveRoom() {
   if (flushTimer) {

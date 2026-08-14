@@ -15,7 +15,7 @@
     </div>
     <div class="bs-row">
       <div class="bs-cell team-col">
-        <span class="team-name" style="color:{state.homePrimary}">{state.homeName}</span>
+        {#if state.homeLogo}<img class="team-logo" src={state.homeLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name" style="color:{state.homePrimary}">{state.homeName}</span>
       </div>
       <div class="bs-cell stat-col val">{state.homeScore}</div>
       <div class="bs-cell stat-col val">{state.homeHits}</div>
@@ -23,7 +23,7 @@
     </div>
     <div class="bs-row">
       <div class="bs-cell team-col">
-        <span class="team-name" style="color:{state.awayPrimary}">{state.awayName}</span>
+        {#if state.awayLogo}<img class="team-logo" src={state.awayLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name" style="color:{state.awayPrimary}">{state.awayName}</span>
       </div>
       <div class="bs-cell stat-col val">{state.awayScore}</div>
       <div class="bs-cell stat-col val">{state.awayHits}</div>
@@ -98,4 +98,13 @@
   .base.occupied { background: #fbbf24; border-color: #fbbf24; }
   .empty-center { width: 10px; height: 10px; opacity: 0; }
   .home-plate { border-radius: 0 0 4px 4px; }
+
+  /* Team badge — sits beside the name, sized to the type rather than fixed, so
+     it scales with the overlay. Hidden if the image fails, which matters for
+     externally linked badges whose host may be unreachable at kickoff. */
+  .team-logo {
+    height: 1.9em; width: auto; max-width: 2.6em;
+    object-fit: contain; flex-shrink: 0;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45));
+  }
 </style>

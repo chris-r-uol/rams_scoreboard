@@ -108,6 +108,53 @@ export function shortcutsFor(sport) {
   return groups;
 }
 
+/**
+ * The same actions, flattened and addressable by id, for the phone remote.
+ *
+ * The remote deliberately reuses the shortcut definitions rather than defining
+ * its own vocabulary: one list to keep correct, and the buttons on the phone
+ * are guaranteed to do exactly what the keyboard does.
+ *
+ * `?` is dropped — showing a cheat sheet is a Controller concern, not something
+ * a remote can ask for.
+ */
+export function commandsFor(sport) {
+  return shortcutsFor(sport)
+    .map(({ group, items }) => ({
+      group,
+      items: items
+        .filter((i) => i.run)
+        .map((i) => ({ id: commandId(i), label: i.label, keys: i.keys })),
+    }))
+    .filter((g) => g.items.length);
+}
+
+/** Stable identifier for an action — its primary key is unique within a sport. */
+function commandId(item) {
+  return item.keys[0];
+}
+
+/**
+ * Execute a command received from a remote.
+ *
+ * Commands are looked up in the sport's own action list rather than applied as
+ * arbitrary state patches, so a paired phone can only do things the controller
+ * itself offers — not write anything it likes into the scoreboard.
+ *
+ * @returns {boolean} whether a matching action was found and run
+ */
+export function runCommand(sport, id) {
+  for (const { items } of shortcutsFor(sport)) {
+    for (const item of items) {
+      if (item.run && commandId(item) === id) {
+        item.run();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Shortcuts that only make sense for one sport. */
 function sportExtras(sport) {
   switch (sport) {

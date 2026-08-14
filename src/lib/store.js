@@ -153,6 +153,11 @@ const DEFAULT_STATE = {
   awayName: 'AWAY',
   homeScore: 0,
   awayScore: 0,
+  // Team badges. Either an inline data URL (downscaled in the browser, no
+  // storage backend involved) or an https link to an externally hosted image.
+  // Empty means no badge. See logo.js.
+  homeLogo: '',
+  awayLogo: '',
   homePrimary: '#002244',
   homeSecondary: '#869397',
   homeText: '#FFFFFF',

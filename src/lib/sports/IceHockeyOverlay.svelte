@@ -17,7 +17,7 @@
          style="background: linear-gradient(135deg, {state.homePrimary} 70%, {state.homeSecondary} 100%); color: {state.homeText};">
       <div class="team-inner">
         <div class="team-info">
-          <span class="team-name">{state.homeName}</span>
+          {#if state.homeLogo}<img class="team-logo" src={state.homeLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name">{state.homeName}</span>
           <div class="team-badges">
             {#if state.homeTimeouts > 0}
               <span class="badge timeout-badge">TO: {state.homeTimeouts}</span>
@@ -39,7 +39,7 @@
       <div class="team-inner away">
         {#key state.awayScore}<span class="team-score">{state.awayScore}</span>{/key}
         <div class="team-info">
-          <span class="team-name">{state.awayName}</span>
+          {#if state.awayLogo}<img class="team-logo" src={state.awayLogo} alt="" onerror={(e) => e.currentTarget.style.display = "none"} />{/if}<span class="team-name">{state.awayName}</span>
           <div class="team-badges">
             {#if state.awayTimeouts > 0}
               <span class="badge timeout-badge">TO: {state.awayTimeouts}</span>
@@ -100,5 +100,14 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .team-score { animation: none; }
+  }
+
+  /* Team badge — sits beside the name, sized to the type rather than fixed, so
+     it scales with the overlay. Hidden if the image fails, which matters for
+     externally linked badges whose host may be unreachable at kickoff. */
+  .team-logo {
+    height: 1.9em; width: auto; max-width: 2.6em;
+    object-fit: contain; flex-shrink: 0;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45));
   }
 </style>

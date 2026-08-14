@@ -1,5 +1,6 @@
 <script>
   import { scoreboard } from './store.js';
+  import { fileToBadge, validateBadgeUrl, byteLength, formatBytes } from './logo.js';
 
   let state = $state({});
   scoreboard.subscribe((s) => { state = s; });
@@ -61,6 +62,7 @@
       primary: state[`${side}Primary`],
       secondary: state[`${side}Secondary`],
       text: state[`${side}Text`],
+      logo: state[`${side}Logo`] || '',
     };
 
     // Saving the same name again updates it rather than making a duplicate.
@@ -79,7 +81,48 @@
       [`${side}Primary`]: team.primary,
       [`${side}Secondary`]: team.secondary,
       [`${side}Text`]: team.text,
+      [`${side}Logo`]: team.logo || '',
     });
+  }
+
+  // ── Team badges ─────────────────────────────────────────
+  let badgeError = $state({ home: '', away: '' });
+  let badgeUrlDraft = $state({ home: '', away: '' });
+
+  async function pickBadge(side, event) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = ''; // let the same file be chosen again
+    if (!file) return;
+
+    badgeError = { ...badgeError, [side]: '' };
+    try {
+      const badge = await fileToBadge(file);
+      scoreboard.patch({ [`${side}Logo`]: badge });
+    } catch (err) {
+      badgeError = { ...badgeError, [side]: err.message };
+    }
+  }
+
+  function applyBadgeUrl(side) {
+    badgeError = { ...badgeError, [side]: '' };
+    try {
+      const url = validateBadgeUrl(badgeUrlDraft[side]);
+      scoreboard.patch({ [`${side}Logo`]: url });
+      badgeUrlDraft = { ...badgeUrlDraft, [side]: '' };
+    } catch (err) {
+      badgeError = { ...badgeError, [side]: err.message };
+    }
+  }
+
+  function clearBadge(side) {
+    badgeError = { ...badgeError, [side]: '' };
+    scoreboard.patch({ [`${side}Logo`]: '' });
+  }
+
+  /** What this badge costs on every broadcast, when it is embedded. */
+  function badgeCost(value) {
+    if (!value?.startsWith('data:')) return null;
+    return formatBytes(byteLength(value));
   }
 
   function forgetTeam(name) {
@@ -160,6 +203,41 @@
           </label>
         </div>
 
+        <!-- Badge -->
+        <div class="mb-5">
+          <span class="section-label block mb-2">Badge</span>
+          <div class="badge-row">
+            <div class="badge-preview">
+              {#if state.homeLogo}
+                <img src={state.homeLogo} alt="Home badge" />
+              {:else}
+                <span class="badge-empty">None</span>
+              {/if}
+            </div>
+            <div class="badge-actions">
+              <label class="badge-btn">
+                Upload
+                <input type="file" accept="image/*" onchange={(e) => pickBadge('home', e)} hidden />
+              </label>
+              {#if state.homeLogo}
+                <button onclick={() => clearBadge('home')} class="badge-btn badge-btn-quiet">Remove</button>
+              {/if}
+              {#if badgeCost(state.homeLogo)}
+                <span class="badge-size">{badgeCost(state.homeLogo)} embedded</span>
+              {/if}
+            </div>
+          </div>
+          <div class="badge-url">
+            <input type="url" placeholder="…or paste an https image URL"
+                   bind:value={badgeUrlDraft.home}
+                   onkeydown={(e) => e.key === 'Enter' && applyBadgeUrl('home')} />
+            <button onclick={() => applyBadgeUrl('home')} class="badge-btn">Link</button>
+          </div>
+          {#if badgeError.home}
+            <p class="badge-error">{badgeError.home}</p>
+          {/if}
+        </div>
+
         <div class="mb-5">
           <div class="flex items-center justify-between mb-3">
             <span class="section-label">Primary Color</span>
@@ -230,6 +308,41 @@
           </label>
         </div>
 
+        <!-- Badge -->
+        <div class="mb-5">
+          <span class="section-label block mb-2">Badge</span>
+          <div class="badge-row">
+            <div class="badge-preview">
+              {#if state.awayLogo}
+                <img src={state.awayLogo} alt="Away badge" />
+              {:else}
+                <span class="badge-empty">None</span>
+              {/if}
+            </div>
+            <div class="badge-actions">
+              <label class="badge-btn">
+                Upload
+                <input type="file" accept="image/*" onchange={(e) => pickBadge('away', e)} hidden />
+              </label>
+              {#if state.awayLogo}
+                <button onclick={() => clearBadge('away')} class="badge-btn badge-btn-quiet">Remove</button>
+              {/if}
+              {#if badgeCost(state.awayLogo)}
+                <span class="badge-size">{badgeCost(state.awayLogo)} embedded</span>
+              {/if}
+            </div>
+          </div>
+          <div class="badge-url">
+            <input type="url" placeholder="…or paste an https image URL"
+                   bind:value={badgeUrlDraft.away}
+                   onkeydown={(e) => e.key === 'Enter' && applyBadgeUrl('away')} />
+            <button onclick={() => applyBadgeUrl('away')} class="badge-btn">Link</button>
+          </div>
+          {#if badgeError.away}
+            <p class="badge-error">{badgeError.away}</p>
+          {/if}
+        </div>
+
         <div class="mb-5">
           <div class="flex items-center justify-between mb-3">
             <span class="section-label">Primary Color</span>
@@ -286,6 +399,47 @@
 </div>
 
 <style>
+  /* ── Team badges ── */
+  .badge-row { display: flex; align-items: center; gap: 12px; }
+  .badge-preview {
+    width: 52px; height: 52px; flex-shrink: 0;
+    border-radius: 10px; border: 1px solid var(--c-bd-input, #374151);
+    background: var(--c-bg-input, #111827);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .badge-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .badge-empty {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--c-text-mute, #6b7280);
+  }
+  .badge-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .badge-btn {
+    padding: 6px 13px; border-radius: 8px;
+    background: var(--c-bg-btn, #1f2937); color: var(--c-text-btn, #e5e7eb);
+    border: 1px solid var(--c-bd-btn, #374151);
+    font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .badge-btn:hover { background: var(--c-bg-btn-h, #374151); }
+  .badge-btn-quiet { background: transparent; }
+  .badge-size {
+    font-size: 11px; color: var(--c-text-mute, #6b7280);
+    font-variant-numeric: tabular-nums;
+  }
+  .badge-url { display: flex; gap: 8px; margin-top: 10px; }
+  .badge-url input {
+    flex: 1; min-width: 0;
+    padding: 7px 11px; border-radius: 8px;
+    background: var(--c-bg-input, #111827);
+    border: 1px solid var(--c-bd-input, #374151);
+    color: var(--c-text-val, #f9fafb); font-size: 12px;
+  }
+  .badge-error {
+    margin: 8px 0 0; font-size: 12px; line-height: 1.5;
+    color: #fca5a5;
+  }
+
   /* ── Saved teams ── */
   .saved-teams {
     margin-top: 22px; padding-top: 20px;
