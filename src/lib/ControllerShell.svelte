@@ -6,7 +6,7 @@
     SCALE_MIN, SCALE_MAX, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE,
   } from './overlayLayout.js';
   import { signOut, user, plan } from './auth.js';
-  import { buildOverlayUrl } from './room.js';
+  import { buildOverlayUrl, buildRemoteUrl, getRemoteToken, rotateRemoteToken } from './room.js';
   import { realtimeStatus } from './realtime.js';
 
   let { sportLabel, sportEmoji, onReset, children } = $props();
@@ -99,6 +99,31 @@
     scoreboard.patch({ overlayScale: clampScale(v) });
   }
 
+  // ── Phone remote pairing ────────────────────────────────
+  let showRemote = $state(false);
+  let remoteUrl = $state(buildRemoteUrl(getRemoteToken()));
+  let remoteCopied = $state(false);
+  let remoteCopyTimer;
+
+  async function copyRemoteUrl() {
+    try {
+      await navigator.clipboard.writeText(remoteUrl);
+      remoteCopied = true;
+      clearTimeout(remoteCopyTimer);
+      remoteCopyTimer = setTimeout(() => (remoteCopied = false), 2000);
+    } catch (_) {
+      // Clipboard blocked — the input below is selectable.
+    }
+  }
+
+  function regenerateRemote() {
+    remoteUrl = buildRemoteUrl(rotateRemoteToken());
+    remoteCopied = false;
+    // The controller has to rejoin under the new token, which drops any phone
+    // paired on the old one — which is the point of regenerating.
+    window.location.reload();
+  }
+
   function requestReset() {
     confirmingReset = true;
   }
@@ -167,6 +192,11 @@
         <button onclick={undoLast} class="btn-header-icon" disabled={depth === 0}
                 title={depth ? `Undo last action (Z) — ${depth} available` : 'Nothing to undo'}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+        </button>
+
+        <!-- Phone remote -->
+        <button onclick={() => (showRemote = true)} class="btn-header-icon" title="Use a phone as a second controller">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
         </button>
 
         <!-- Overlay placement -->
@@ -268,6 +298,42 @@
     {@render children()}
     <div class="h-10"></div>
   </div>
+
+  <!-- ═════ PHONE REMOTE ═════ -->
+  {#if showRemote}
+    <div class="modal-scrim" role="presentation" onclick={() => (showRemote = false)}>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rm-title"
+           onclick={(e) => e.stopPropagation()}>
+        <div class="keys-head">
+          <h2 id="rm-title" class="modal-title">Use a phone as a second controller</h2>
+          <button onclick={() => (showRemote = false)} class="btn-modal-cancel">Close</button>
+        </div>
+        <p class="modal-body">
+          Open this link on a phone and it becomes a second controller for the same game —
+          one person on the clock, another on the score. It shows the live score and clock,
+          so whoever holds it never has to look back at this screen.
+        </p>
+
+        <div class="ov-field">
+          <span class="ov-label">Pairing link</span>
+          <input class="rm-url" type="text" readonly value={remoteUrl}
+                 onfocus={(e) => e.currentTarget.select()} aria-label="Phone remote pairing link" />
+          <div class="ov-presets">
+            <button onclick={copyRemoteUrl} class="ov-preset">
+              {remoteCopied ? 'Copied!' : 'Copy link'}
+            </button>
+            <button onclick={regenerateRemote} class="ov-preset">Regenerate</button>
+          </div>
+        </div>
+
+        <p class="rm-warn">
+          Treat this link like a key — anyone who opens it can change the scoreboard.
+          It is deliberately different from your OBS overlay URL, so sharing that one
+          gives away nothing. Regenerating unpairs every phone immediately.
+        </p>
+      </div>
+    </div>
+  {/if}
 
   <!-- ═════ OVERLAY PLACEMENT ═════ -->
   {#if showOverlaySettings}
@@ -655,6 +721,21 @@
     cursor: pointer; transition: background 0.15s ease;
   }
   .ov-preset:hover { background: var(--c-bg-btn-h); }
+
+  /* ── Phone remote ── */
+  .rm-url {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    background: var(--c-bg-input); border: 1px solid var(--c-bd-input);
+    color: var(--c-text-val);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  }
+  .rm-warn {
+    margin: 18px 0 0; font-size: 12.5px; line-height: 1.6;
+    color: var(--c-text-sub);
+    background: rgba(217, 119, 6, 0.1);
+    border: 1px solid rgba(217, 119, 6, 0.3);
+    border-radius: 10px; padding: 12px 14px;
+  }
 
   /* ── Keyboard shortcuts sheet ── */
   .modal-wide { max-width: 680px; }

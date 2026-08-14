@@ -2,7 +2,11 @@
   import { onDestroy } from 'svelte';
   import { scoreboard, stopAllIntervals } from './store.js';
   import { user, plan, sportAllowedOn } from './auth.js';
-  import { leaveRoom } from './realtime.js';
+  import {
+    leaveRoom, joinControlChannel, leaveControlChannel, sendControlState,
+  } from './realtime.js';
+  import { getRemoteToken } from './room.js';
+  import { runCommand } from './shortcuts.js';
   import SportPicker from './SportPicker.svelte';
   import FootballController from './sports/FootballController.svelte';
   import SoccerController from './sports/SoccerController.svelte';
@@ -57,10 +61,31 @@
     }
   });
 
+  // ── Phone remote ────────────────────────────────────────
+  // Commands arrive as action ids and are resolved against this sport's own
+  // list, so a paired phone can only trigger things the controller already
+  // offers rather than writing arbitrary state.
+  joinControlChannel(getRemoteToken(), {
+    role: 'host',
+    onCommand: ({ id } = {}) => {
+      const current = scoreboard.get();
+      if (!current.sport || !id) return;
+      if (runCommand(current.sport, id)) sendControlState(scoreboard.get());
+    },
+    onRemoteJoined: () => sendControlState(scoreboard.get()),
+  });
+
+  // Mirror state to any paired phone. Clock movement is applied silently on
+  // every client, so this only fires on real changes — not once a second.
+  $effect(() => {
+    sendControlState(state);
+  });
+
   onDestroy(() => {
     unsubUser();
     unsubPlan();
     leaveRoom();
+    leaveControlChannel();
   });
 </script>
 

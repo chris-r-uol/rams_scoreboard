@@ -6,6 +6,7 @@
   import Login from './lib/Login.svelte';
   import Subscribe from './lib/Subscribe.svelte';
   import Landing from './lib/Landing.svelte';
+  import Remote from './lib/Remote.svelte';
   import { loading, isAuthenticated, isSubscribed, refreshSubscription } from './lib/auth.js';
   import { parseHash } from './lib/room.js';
 
@@ -69,6 +70,10 @@
 <!-- Public routes: always accessible -->
 {#if route === '#/overlay'}
   <Overlay />
+{:else if route === '#/remote'}
+  <!-- Public like the overlay: a phone has no session. Access is gated by the
+       pairing token in the URL, not by login. -->
+  <Remote />
 {:else if route === '#/privacy'}
   <PrivacyPolicy />
 {:else if route === '#/terms'}

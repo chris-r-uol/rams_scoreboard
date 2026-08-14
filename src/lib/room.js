@@ -11,6 +11,64 @@
  */
 
 export const ROOM_PARAM = 'r';
+export const TOKEN_PARAM = 't';
+
+// ── Phone remote pairing ─────────────────────────────────
+//
+// The pairing token is a capability: holding it means being able to change the
+// scoreboard. It is therefore deliberately NOT derived from the account id,
+// which is public in the OBS overlay URL — otherwise sharing an overlay link
+// would hand over control of the game.
+//
+// Kept on the device rather than the account so it can be rotated instantly
+// without a round trip, which is what an operator wants if a link leaks
+// mid-tournament.
+const TOKEN_KEY = 'scoreboard-remote-token-v1';
+
+function randomToken() {
+  // 128 bits, hex-encoded. Guessing one is not a realistic attack on a channel
+  // name, and it never appears in the overlay URL.
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** The current pairing token, creating one on first use. */
+export function getRemoteToken() {
+  try {
+    let t = localStorage.getItem(TOKEN_KEY);
+    if (!t) {
+      t = randomToken();
+      localStorage.setItem(TOKEN_KEY, t);
+    }
+    return t;
+  } catch (_) {
+    // Storage blocked — pair for this session only.
+    return randomToken();
+  }
+}
+
+/** Invalidate every paired phone by issuing a new token. */
+export function rotateRemoteToken() {
+  const t = randomToken();
+  try {
+    localStorage.setItem(TOKEN_KEY, t);
+  } catch (_) {}
+  return t;
+}
+
+/** Read the pairing token from the current URL, or null. */
+export function getTokenFromUrl() {
+  if (typeof window === 'undefined') return null;
+  return parseHash(window.location.hash).params.get(TOKEN_PARAM) || null;
+}
+
+/** Build the pairing URL to open on a phone. */
+export function buildRemoteUrl(token) {
+  if (typeof window === 'undefined' || !token) return '';
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#/remote?${TOKEN_PARAM}=${encodeURIComponent(token)}`;
+}
 
 /**
  * Split a hash into its path and query parts.
