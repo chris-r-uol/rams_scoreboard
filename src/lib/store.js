@@ -158,6 +158,16 @@ const DEFAULT_STATE = {
   overlayPosition: 'bottom-center',
   overlayScale: 1,
 
+  // Sponsor panel. Which one is showing, and whether it is showing at all, are
+  // derived locally from these on every client — see sponsors.js — so a
+  // rotating sponsor costs no messages at all.
+  sponsors: [],
+  sponsorPlacement: 'below',
+  sponsorVisibility: 'always',
+  sponsorManualOn: false,
+  sponsorRotateSeconds: 0,
+  sponsorRotateAnchorMs: null,
+
   // ── Shared team fields ──────────────────────────────
   homeName: 'HOME',
   awayName: 'AWAY',
@@ -470,8 +480,18 @@ function createScoreboardStore() {
 
   function broadcast(state) {
     const msg = { type: 'state-update', state, sentAt: Date.now() };
-    // Always send on BroadcastChannel
-    bc?.postMessage(msg);
+    // Always send on BroadcastChannel.
+    //
+    // Guarded because postMessage structured-clones its argument and throws on
+    // anything it cannot clone — a reactive proxy that escaped a component, for
+    // instance. This is the first send, so an unguarded throw here would also
+    // silently take out the WebSocket and Realtime sends below, turning a
+    // same-tab problem into a total loss of sync.
+    try {
+      bc?.postMessage(msg);
+    } catch (err) {
+      console.error('[store] BroadcastChannel post failed:', err);
+    }
     // Also send on WebSocket if relay is connected
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));

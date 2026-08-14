@@ -100,6 +100,14 @@ export function shortcutsFor(sport) {
   groups.push({
     group: 'General',
     items: [
+      {
+        keys: ['G'],
+        label: 'Sponsor on / off',
+        run: () => {
+          const s = scoreboard.get();
+          scoreboard.patch({ sponsorManualOn: !s.sponsorManualOn });
+        },
+      },
       { keys: ['Z'], label: 'Undo last action', run: () => scoreboard.undo() },
       { keys: ['?'], label: 'Show or hide this list', run: null }, // handled by the shell
     ],

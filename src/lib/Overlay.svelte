@@ -10,6 +10,7 @@
   import { getRoomFromUrl } from './room.js';
   import { leaveRoom } from './realtime.js';
   import { overlayAnchorStyle, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE } from './overlayLayout.js';
+  import { sponsorVisible, currentSponsor } from './sponsors.js';
   import FootballOverlay from './sports/FootballOverlay.svelte';
   import SoccerOverlay from './sports/SoccerOverlay.svelte';
   import IceHockeyOverlay from './sports/IceHockeyOverlay.svelte';
@@ -41,10 +42,19 @@
 
   onDestroy(() => leaveRoom());
 
-  // Anchor and scale are published as CSS custom properties, which every sport
-  // overlay reads. Set on a plain wrapper with no transform of its own — a
-  // transform here would make the overlay's `position: fixed` resolve against
-  // this element instead of the OBS canvas.
+  // Anchor and scale are applied to the stage, so the scorebug and any sponsor
+  // move and scale together as one unit.
+  // Sponsor rotation is derived from elapsed time, so this ticks the clock
+  // forward locally rather than waiting for a broadcast that never comes.
+  let now = $state(Date.now());
+  $effect(() => {
+    const id = setInterval(() => { now = Date.now(); }, 500);
+    return () => clearInterval(id);
+  });
+
+  const showSponsor = $derived(sponsorVisible(state));
+  const sponsor = $derived(showSponsor ? currentSponsor(state, now) : null);
+
   const anchorStyle = $derived(
     overlayAnchorStyle(
       state.overlayPosition ?? DEFAULT_OVERLAY_POSITION,
@@ -68,7 +78,8 @@
     Waiting for sport selection…
   </div>
 {:else}
-<div style={anchorStyle}>
+<div class="stage" style={anchorStyle} data-placement={state.sponsorPlacement ?? 'below'}>
+<div class="bug">
 {#if state.sport === 'american-football'}
   <FootballOverlay />
 {:else if state.sport === 'soccer'}
@@ -84,6 +95,14 @@
 {:else if state.sport === 'mtg'}
   <MtgOverlay />
 {/if}
+</div>
+
+{#if sponsor}
+  <img class="sponsor" src={sponsor.image} alt={sponsor.name}
+       onerror={(e) => (e.currentTarget.style.display = 'none')} />
+{/if}
+
+</div>
 
 <!--
   Free-tier watermark. Deliberately small and low-contrast: it should be a
@@ -97,10 +116,38 @@
 {#if state.plan === 'free'}
   <div class="watermark">Stream Your Score</div>
 {/if}
-</div>
 {/if}
 
 <style>
+  /* The anchored unit: scorebug plus any sponsor panel, moved and scaled
+     together so a sponsor never drifts away from the bug at other scales. */
+  .stage {
+    position: fixed;
+    inset: var(--sb-inset, auto auto 48px 50%);
+    transform: var(--sb-translate, translateX(-50%)) scale(var(--sb-scale, 1));
+    transform-origin: var(--sb-origin, bottom center);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: none;
+    z-index: 9999;
+  }
+  .stage[data-placement="below"] { flex-direction: column; }
+  .stage[data-placement="above"] { flex-direction: column-reverse; }
+  .stage[data-placement="right"] { flex-direction: row; }
+  .stage[data-placement="left"]  { flex-direction: row-reverse; }
+
+  .bug { display: flex; }
+
+  .sponsor {
+    display: block;
+    max-height: 64px;
+    max-width: 260px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  }
+
   .watermark {
     position: fixed;
     bottom: 14px;

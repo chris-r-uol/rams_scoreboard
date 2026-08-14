@@ -8,6 +8,8 @@
   import { signOut, user, plan } from './auth.js';
   import { buildOverlayUrl, buildRemoteUrl, buildJoinUrl, getRemoteToken, rotateRemoteToken } from './room.js';
   import { realtimeStatus } from './realtime.js';
+  import { fileToBadge, validateBadgeUrl, byteLength, formatBytes, SPONSOR_MAX_EDGE, SPONSOR_MAX_BYTES } from './logo.js';
+  import { SPONSOR_PLACEMENTS, SPONSOR_VISIBILITY, ROTATION_CHOICES, MAX_SPONSORS, makeSponsor } from './sponsors.js';
 
   let { sportLabel, sportEmoji, onReset, children } = $props();
 
@@ -89,11 +91,27 @@
   let overlayPosition = $state(DEFAULT_OVERLAY_POSITION);
   let overlayScale = $state(DEFAULT_OVERLAY_SCALE);
 
+  // Declared before the subscription below: its callback fires synchronously
+  // on subscribe, so these must already exist when it first assigns them.
+  let showSponsors = $state(false);
+  let sponsors = $state([]);
+  let sponsorPlacement = $state('below');
+  let sponsorVisibility = $state('always');
+  let sponsorManualOn = $state(false);
+  let sponsorRotateSeconds = $state(0);
+  let sponsorError = $state('');
+  let sponsorUrlDraft = $state('');
+
   unsubs.push(scoreboard.subscribe((s) => {
     sport = s.sport;
     if (isFollower) currentPlan = s.plan ?? null;
     overlayPosition = s.overlayPosition ?? DEFAULT_OVERLAY_POSITION;
     overlayScale = s.overlayScale ?? DEFAULT_OVERLAY_SCALE;
+    sponsors = s.sponsors ?? [];
+    sponsorPlacement = s.sponsorPlacement ?? 'below';
+    sponsorVisibility = s.sponsorVisibility ?? 'always';
+    sponsorManualOn = !!s.sponsorManualOn;
+    sponsorRotateSeconds = s.sponsorRotateSeconds ?? 0;
   }));
 
   function setPosition(p) {
@@ -130,6 +148,68 @@
     // The controller has to rejoin under the new token, which drops any phone
     // paired on the old one — which is the point of regenerating.
     window.location.reload();
+  }
+
+
+  // ── Sponsors ────────────────────────────────────────────
+
+  /** What the whole sponsor set costs on every broadcast. */
+  const sponsorBytes = $derived(
+    sponsors.reduce((total, s) => total + (s.image?.startsWith('data:') ? byteLength(s.image) : 0), 0),
+  );
+
+  function commitSponsors(next) {
+    // Snapshot before it leaves the component. `sponsors` is $state, so
+    // spreading or filtering it yields reactive proxies, and a proxy cannot be
+    // structured-cloned — posting one onto the BroadcastChannel throws.
+    //
+    // Re-anchor rotation whenever the list changes, so a newly added sponsor
+    // starts a fresh cycle rather than appearing mid-rotation.
+    scoreboard.patch({
+      sponsors: $state.snapshot(next),
+      sponsorRotateAnchorMs: Date.now(),
+    });
+  }
+
+  async function addSponsorFile(event) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    sponsorError = '';
+
+    if (sponsors.length >= MAX_SPONSORS) {
+      sponsorError = `That's the maximum of ${MAX_SPONSORS}. Remove one first.`;
+      return;
+    }
+    try {
+      const image = await fileToBadge(file, { maxEdge: SPONSOR_MAX_EDGE, maxBytes: SPONSOR_MAX_BYTES });
+      commitSponsors([...sponsors, makeSponsor(file.name.replace(/\.[^.]+$/, ''), image)]);
+    } catch (err) {
+      sponsorError = err.message;
+    }
+  }
+
+  function addSponsorUrl() {
+    sponsorError = '';
+    if (sponsors.length >= MAX_SPONSORS) {
+      sponsorError = `That's the maximum of ${MAX_SPONSORS}. Remove one first.`;
+      return;
+    }
+    try {
+      const url = validateBadgeUrl(sponsorUrlDraft);
+      commitSponsors([...sponsors, makeSponsor('Sponsor', url)]);
+      sponsorUrlDraft = '';
+    } catch (err) {
+      sponsorError = err.message;
+    }
+  }
+
+  function removeSponsor(id) {
+    commitSponsors(sponsors.filter((s) => s.id !== id));
+  }
+
+  function setSponsorRotation(seconds) {
+    scoreboard.patch({ sponsorRotateSeconds: seconds, sponsorRotateAnchorMs: Date.now() });
   }
 
   function requestReset() {
@@ -208,6 +288,13 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
         </button>
         {/if}
+
+        <!-- Sponsors -->
+        <button onclick={() => (showSponsors = true)} class="btn-header-icon"
+                class:btn-header-active={sponsors.length > 0}
+                title="Sponsor logos and when they appear">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 8.4 12 17l-8.6-8.6a4.5 4.5 0 0 1 6.4-6.4L12 3.8l2.2-1.8a4.5 4.5 0 0 1 6.4 6.4z"/></svg>
+        </button>
 
         <!-- Overlay placement -->
         <button onclick={() => (showOverlaySettings = true)} class="btn-header-icon" title="Overlay size and position">
@@ -358,6 +445,108 @@
           gives away nothing. This device stays in charge of the game; paired devices
           send their changes here. Regenerating unpairs everything immediately.
         </p>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ═════ SPONSORS ═════ -->
+  {#if showSponsors}
+    <div class="modal-scrim" role="presentation" onclick={() => (showSponsors = false)}>
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="sp-title"
+           onclick={(e) => e.stopPropagation()}>
+        <div class="keys-head">
+          <h2 id="sp-title" class="modal-title">Sponsors</h2>
+          <button onclick={() => (showSponsors = false)} class="btn-modal-cancel">Close</button>
+        </div>
+        <p class="modal-body">
+          Sponsor logos sit with the scorebug and scale with it. Add one and leave it up, or add
+          several and let them rotate. If you already run a sponsor as its own OBS image source,
+          that still works fine — this is for when the logo should follow the game.
+        </p>
+
+        <!-- The sponsors themselves -->
+        <div class="ov-field">
+          <span class="ov-label">
+            Logos
+            <span class="ov-value">{sponsors.length}/{MAX_SPONSORS}{#if sponsorBytes} · {formatBytes(sponsorBytes)} embedded{/if}</span>
+          </span>
+
+          {#if sponsors.length}
+            <div class="sp-list">
+              {#each sponsors as s (s.id)}
+                <div class="sp-item">
+                  <img src={s.image} alt={s.name} />
+                  <button onclick={() => removeSponsor(s.id)} class="sp-remove" title="Remove {s.name}">×</button>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="sp-empty">No sponsors yet.</p>
+          {/if}
+
+          <div class="ov-presets">
+            <label class="ov-preset">
+              Upload logo
+              <input type="file" accept="image/*" onchange={addSponsorFile} hidden />
+            </label>
+          </div>
+          <div class="badge-url sp-url">
+            <input type="url" placeholder="…or paste an https image URL"
+                   bind:value={sponsorUrlDraft}
+                   onkeydown={(e) => e.key === 'Enter' && addSponsorUrl()} />
+            <button onclick={addSponsorUrl} class="ov-preset">Link</button>
+          </div>
+          {#if sponsorError}<p class="badge-error">{sponsorError}</p>{/if}
+        </div>
+
+        <!-- When it shows -->
+        <div class="ov-field">
+          <span class="ov-label">When it shows</span>
+          <div class="sp-choices">
+            {#each SPONSOR_VISIBILITY as option}
+              <button
+                class="sp-choice"
+                class:sp-choice-on={sponsorVisibility === option.id}
+                onclick={() => scoreboard.patch({ sponsorVisibility: option.id })}
+              >{option.label}</button>
+            {/each}
+          </div>
+          {#if sponsorVisibility === 'manual'}
+            <button
+              class="sp-toggle"
+              class:sp-toggle-on={sponsorManualOn}
+              onclick={() => scoreboard.patch({ sponsorManualOn: !sponsorManualOn })}
+            >{sponsorManualOn ? 'Sponsor is on air — turn off' : 'Sponsor is hidden — turn on'} (G)</button>
+          {/if}
+        </div>
+
+        <!-- Rotation -->
+        <div class="ov-field">
+          <span class="ov-label">Rotate between them</span>
+          <div class="ov-presets">
+            {#each ROTATION_CHOICES as seconds}
+              <button
+                class="ov-preset"
+                class:sp-choice-on={sponsorRotateSeconds === seconds}
+                onclick={() => setSponsorRotation(seconds)}
+              >{seconds === 0 ? 'No rotation' : `${seconds}s`}</button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Placement -->
+        <div class="ov-field">
+          <span class="ov-label">Where, relative to the scorebug</span>
+          <div class="ov-presets">
+            {#each SPONSOR_PLACEMENTS as place}
+              <button
+                class="ov-preset"
+                class:sp-choice-on={sponsorPlacement === place}
+                onclick={() => scoreboard.patch({ sponsorPlacement: place })}
+              >{place[0].toUpperCase() + place.slice(1)}</button>
+            {/each}
+          </div>
+        </div>
       </div>
     </div>
   {/if}
@@ -748,6 +937,51 @@
     cursor: pointer; transition: background 0.15s ease;
   }
   .ov-preset:hover { background: var(--c-bg-btn-h); }
+
+  /* ── Sponsors ── */
+  .btn-header-active { color: #38bdf8; }
+
+  .sp-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .sp-item {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    height: 54px; min-width: 74px; padding: 6px 10px;
+    background: var(--c-bg-input); border: 1px solid var(--c-bd-input);
+    border-radius: 10px;
+  }
+  .sp-item img { max-height: 100%; max-width: 120px; object-fit: contain; }
+  .sp-remove {
+    position: absolute; top: -7px; right: -7px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--c-bg-btn); border: 1px solid var(--c-bd-btn);
+    color: var(--c-text-sub); font-size: 14px; line-height: 1;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .sp-remove:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+
+  .sp-empty { font-size: 12.5px; color: var(--c-text-mute); margin: 0 0 12px; }
+  .sp-url { margin-top: 10px; }
+
+  .sp-choices { display: flex; flex-direction: column; gap: 6px; }
+  .sp-choice {
+    text-align: left; padding: 9px 13px; border-radius: 9px;
+    background: var(--c-bg-input); border: 1px solid var(--c-bd-input);
+    color: var(--c-text-sub); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .sp-choice:hover { border-color: #2563eb; }
+  .sp-choice-on {
+    background: rgba(37, 99, 235, 0.16); border-color: #2563eb; color: var(--c-text);
+    font-weight: 600;
+  }
+
+  .sp-toggle {
+    margin-top: 10px; width: 100%; padding: 11px; border-radius: 10px;
+    background: var(--c-bg-btn); border: 1px solid var(--c-bd-btn);
+    color: var(--c-text-btn); font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .sp-toggle-on { background: #16a34a; border-color: #15803d; color: #fff; }
 
   /* ── Phone remote ── */
   .rm-url {
