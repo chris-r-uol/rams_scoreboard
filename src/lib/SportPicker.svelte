@@ -3,9 +3,14 @@
   import { scoreboard, stopAllIntervals } from './store.js';
   import { signOut, plan, sportAllowedOn, FREE_SPORT } from './auth.js';
 
-  let currentPlan = $state('free');
+  // null until the subscription resolves. Locks and the free-plan banner stay
+  // hidden until then, so a subscriber never sees their sports briefly padlocked
+  // on the way in.
+  let currentPlan = $state(null);
   const unsubPlan = plan.subscribe((p) => (currentPlan = p));
   onDestroy(unsubPlan);
+
+  const planKnown = $derived(currentPlan !== null);
 
   const sports = [
     {
@@ -68,7 +73,9 @@
 
   function selectSport(id) {
     // Locked sports lead to the upgrade page rather than failing silently.
-    if (!sportAllowedOn(currentPlan, id)) {
+    // While the plan is still unknown the choice is allowed through; the
+    // Controller re-checks once it resolves.
+    if (planKnown && !sportAllowedOn(currentPlan, id)) {
       window.location.hash = '#/subscribe';
       return;
     }
@@ -128,8 +135,8 @@
   <div class="max-w-screen-xl mx-auto px-6 pb-20">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
       {#each sports as sport}
-        {@const unlocked = sportAllowedOn(currentPlan, sport.id)}
-        {@const isFreeSport = currentPlan === 'free' && sport.id === FREE_SPORT}
+        {@const unlocked = !planKnown || sportAllowedOn(currentPlan, sport.id)}
+        {@const isFreeSport = planKnown && currentPlan === 'free' && sport.id === FREE_SPORT}
         <button
           onclick={() => selectSport(sport.id)}
           class="sport-card group text-left"

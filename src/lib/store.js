@@ -141,7 +141,11 @@ const DEFAULT_STATE = {
   // Plan of the account hosting this scoreboard. Broadcast so the Overlay —
   // which runs unauthenticated inside OBS and cannot look this up itself —
   // knows whether to render the free-tier watermark.
-  plan: 'free',
+  //
+  // null means "not established yet". Defaulting to 'free' put a watermark on a
+  // paying subscriber's stream for the moment before their subscription
+  // resolved, which is precisely when the source is being set up and looked at.
+  plan: null,
 
   // Where the scorebug sits on the OBS canvas, and how large. Broadcast for
   // the same reason as `plan`. See overlayLayout.js.
@@ -501,6 +505,12 @@ function createScoreboardStore() {
       // Clocks never resume running on their own — a clock that restarted
       // itself during a reload would silently run on while nobody was watching.
       const revived = { ...DEFAULT_STATE, ...state };
+
+      // The saved plan is a stale claim about the account, not part of the
+      // game. Restoring it would rebroadcast a possibly-wrong value before the
+      // real one is known; the Controller republishes it once it resolves.
+      revived.plan = null;
+
       for (const c of CLOCKS) {
         revived[c.running] = false;
         revived[c.anchorMs] = null;

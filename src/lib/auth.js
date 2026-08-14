@@ -62,7 +62,28 @@ export const user = derived(session, ($s) => $s?.user ?? null);
 export const FREE_SPORT = 'ice-hockey';
 
 /** 'pro' unlocks every sport and removes the overlay watermark. */
-export const plan = derived(isSubscribed, ($subscribed) => ($subscribed ? 'pro' : 'free'));
+/**
+ * True once we actually know the answer, as opposed to not having asked yet.
+ *
+ * The subscription lookup is deliberately non-blocking so startup cannot hang
+ * on it, which means there is a window on every load where the status is simply
+ * unknown. Without this flag that window is indistinguishable from "no
+ * subscription", and a paying account is briefly treated as free.
+ */
+export const subscriptionResolved = writable(false);
+
+/**
+ * 'pro' | 'free' | null, where null means "not known yet".
+ *
+ * Callers must treat null as "wait" rather than "free". Getting this wrong is
+ * not cosmetic: the Controller resets any sport the plan does not allow, so
+ * assuming free before the answer arrives wipes a Pro user's sport on every
+ * reload, mid-match included.
+ */
+export const plan = derived(
+  [isSubscribed, subscriptionResolved],
+  ([$subscribed, $resolved]) => ($resolved ? ($subscribed ? 'pro' : 'free') : null),
+);
 
 /** Whether a given sport is playable on the current plan. */
 export function sportAllowedOn(planName, sportId) {
@@ -95,12 +116,14 @@ function applyLocalAuthBypass() {
   if (mode === 'signed-out') {
     session.set(null);
     subscriptionStatus.set(null);
+    subscriptionResolved.set(true);
     loading.set(false);
     return;
   }
 
   session.set(LOCAL_DEV_SESSION);
   subscriptionStatus.set(mode === 'free' ? null : 'active');
+  subscriptionResolved.set(true);
   loading.set(false);
 }
 
@@ -112,6 +135,7 @@ async function init() {
   }
 
   if (!supabase) {
+    subscriptionResolved.set(true);
     loading.set(false);
     return;
   }
@@ -132,8 +156,13 @@ async function init() {
   }
 
   // Fetch subscription status in the background so startup cannot hang.
+  // Until it lands, `plan` reports null — "not known yet" — which callers must
+  // treat as "wait", never as "free".
   if (currentSession?.user) {
     fetchSubscription(currentSession.user.id);
+  } else {
+    // No session, so there is nothing to look up: the answer is known.
+    subscriptionResolved.set(true);
   }
 
   // Listen for auth state changes (login, logout, token refresh)
@@ -149,6 +178,7 @@ async function init() {
       }
     } else {
       subscriptionStatus.set(null);
+      subscriptionResolved.set(true);
     }
   });
 }
@@ -179,6 +209,11 @@ async function fetchSubscription(userId) {
   } catch (err) {
     console.error('[auth] Subscription fetch error:', err);
     subscriptionStatus.set(null);
+  } finally {
+    // Resolved either way. A failed lookup means we genuinely do not know of a
+    // subscription, which is the same outcome as not having one — but it must
+    // still unblock, or the controller would wait forever.
+    subscriptionResolved.set(true);
   }
 }
 
