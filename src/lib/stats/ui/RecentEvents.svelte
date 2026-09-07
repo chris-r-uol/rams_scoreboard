@@ -25,6 +25,14 @@
 		return id === 'team' ? 'Team' : 'Unknown player';
 	}
 
+	/**
+	 * The period is printed as recorded, with no "Q" added.
+	 *
+	 * Standalone, `quarter` held a bare "2" and needed the prefix. Here the
+	 * scoreboard stamps a full label — Q2 in football, P1 in hockey, H1 in
+	 * soccer — so prefixing produced "QQ2", and would have labelled a hockey
+	 * period as a quarter.
+	 */
 	function formatTime(ts: number): string {
 		return new Date(ts).toLocaleTimeString([], {
 			hour: '2-digit',
@@ -63,7 +71,7 @@
 				<div class="flex items-start gap-2 rounded-lg bg-gray-800 px-3 py-2 text-sm">
 					<div class="min-w-0 flex-1">
 						<p class="text-xs text-gray-400">
-							{formatTime(ev.timestamp)}{ev.quarter ? ` · Q${ev.quarter}` : ''}{ev.gameClock
+							{formatTime(ev.timestamp)}{ev.quarter ? ` · ${ev.quarter}` : ''}{ev.gameClock
 								? ` ${ev.gameClock}`
 								: ''}
 						</p>

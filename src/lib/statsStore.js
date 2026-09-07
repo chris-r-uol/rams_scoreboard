@@ -30,15 +30,23 @@
 import { writable, get } from 'svelte/store';
 import { sendStats } from './realtime.js';
 import { calculateStats } from './stats/calculateStats.ts';
-import { recalculateDrives } from './stats/drives.ts';
+import { recalculateDrives, isOffensiveAction } from './stats/drives.ts';
 import { reconcileMilestones, detectAlerts } from './stats/alertDetection.ts';
 import { emptyTeamStats } from './stats/emptyStats.ts';
 
 const PERSIST_KEY = 'scoreboard-stats-v1';
 const PERSIST_MAX_AGE_MS = 6 * 60 * 60 * 1000; // matches the scoreboard's game
 
-/** Fields recomputed from `events`; never sent, never persisted. */
-const DERIVED_FIELDS = ['playerStats', 'teamStats', 'currentDrive', 'completedDrives'];
+/**
+ * Fields recomputed from `events`; never sent, never persisted.
+ *
+ * Drives are deliberately NOT in here. A drive's plays and yards are derived —
+ * `derive` recomputes both on every change — but the drive itself is not: its
+ * start yard line, how it ended, and which plays belong to it exist nowhere in
+ * the event log. Stripping them left the overlay's drive panel permanently
+ * empty and would have lost every completed drive on a controller reload.
+ */
+const DERIVED_FIELDS = ['playerStats', 'teamStats'];
 
 export function createEmptyStats() {
   return {
@@ -152,6 +160,19 @@ function createStatsStore() {
       isController = true;
     },
 
+    /**
+     * Mark this client as a viewer: it owns nothing and takes what it is sent.
+     *
+     * The store is module scope, so ownership outlives the component that
+     * claimed it. Hash-routing from the controller to the overlay does not
+     * reload the page, which left an overlay still claiming to own the stats
+     * and therefore refusing every update it was sent — the panel froze on
+     * whatever was on air when the route changed.
+     */
+    becomeViewer() {
+      isController = false;
+    },
+
     /** Route changes to the host instead of owning them. */
     setFollowerTransport(send) {
       forwardToHost = send;
@@ -229,9 +250,22 @@ function createStatsStore() {
         queueTailExpiry,
       );
 
+      // Attach the play to the open drive. Only offensive actions count, so a
+      // drive's play total matches the offence's snap count rather than every
+      // tackle and flag that happened while it was running.
+      //
+      // Only the id is stored: plays and yards are recomputed from the events
+      // it still points at, which is what makes deleting a play mid-drive come
+      // out right instead of leaving the totals a play ahead.
+      let currentDrive = current.currentDrive;
+      if (currentDrive && isOffensiveAction(event.action)) {
+        currentDrive = { ...currentDrive, eventIds: [...currentDrive.eventIds, event.id] };
+      }
+
       commit({
         ...current,
         events,
+        currentDrive,
         alertQueue: [...liveQueue, ...alerts],
         firedMilestones: [...(current.firedMilestones ?? []), ...newMilestoneKeys],
       });
@@ -296,6 +330,48 @@ function createStatsStore() {
 
     setOverlayMode(mode) {
       commit({ ...get({ subscribe }), overlayMode: mode });
+    },
+
+    // ── Drives ────────────────────────────────────────────
+    /** Open a drive. Plays entered from now on are attached to it. */
+    startDrive(startYardLine) {
+      const current = get({ subscribe });
+      commit({
+        ...current,
+        currentDrive: {
+          id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          startTime: Date.now(),
+          startYardLine: Number.isFinite(startYardLine) ? startYardLine : undefined,
+          eventIds: [],
+          yardsGained: 0,
+          plays: 0,
+          result: 'ongoing',
+        },
+      });
+    },
+
+    /** Close the open drive with how it finished. */
+    endDrive(result) {
+      const current = get({ subscribe });
+      if (!current.currentDrive) return;
+      commit({
+        ...current,
+        completedDrives: [
+          ...current.completedDrives,
+          { ...current.currentDrive, result, endTime: Date.now() },
+        ],
+        currentDrive: null,
+      });
+    },
+
+    /**
+     * Abandon the open drive.
+     *
+     * The plays stay in the log — they happened. Only the grouping is dropped,
+     * which is what you want when a drive was started by mistake.
+     */
+    cancelDrive() {
+      commit({ ...get({ subscribe }), currentDrive: null });
     },
 
     setRoster(roster) {

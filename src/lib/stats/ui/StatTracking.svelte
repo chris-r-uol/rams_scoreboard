@@ -18,8 +18,12 @@
   import { parseRosterText } from '../rosterParser.ts';
   import { getActionMeta } from '../eventTypes.ts';
   import StatEntryPanel from './StatEntryPanel.svelte';
+  import PenaltyPanel from './PenaltyPanel.svelte';
+  import DriveTracker from './DriveTracker.svelte';
   import RecentEvents from './RecentEvents.svelte';
   import OverlayControls from './OverlayControls.svelte';
+  import EventEditModal from './EventEditModal.svelte';
+  import StatAdjustModal from './StatAdjustModal.svelte';
 
   let open = $state(false);
   let category = $state('rushing');
@@ -30,6 +34,17 @@
   let rosterText = $state('');
   let rosterError = $state('');
   let showRosterImport = $state(false);
+
+  // Penalty entry. Kept here rather than inside the panel so switching tabs
+  // mid-flag does not lose what was already picked.
+  let penaltySide = $state('offensive');
+  let penaltyPlayerId = $state('');
+  let penaltyName = $state('');
+  let penaltyYards = $state(5);
+
+  /** The event open in the edit dialog, or null. */
+  let editing = $state(null);
+  let adjusting = $state(false);
 
   /** The last delete, so it can be put back where it came from. */
   let lastDeleted = $state(null);
@@ -55,7 +70,19 @@
     { id: 'passing', label: 'Passing' },
     { id: 'rushing', label: 'Rushing' },
     { id: 'defence', label: 'Defence' },
+    { id: 'penalty', label: 'Penalty' },
   ];
+
+  /**
+   * Ids are generated here rather than with crypto.randomUUID.
+   *
+   * They only have to be unique within one game's log, and randomUUID is
+   * unavailable on a page served over plain http — which is exactly how someone
+   * running this on a laptop for OBS reaches it.
+   */
+  function newId() {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
 
   function record(action) {
     const meta = getActionMeta(action);
@@ -64,7 +91,7 @@
     const resolvedYards = yards !== 0 ? yards : (meta?.defaultYards ?? 0);
 
     stats.addEvent(withGameContext({
-      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      id: newId(),
       timestamp: Date.now(),
       category,
       action,
@@ -76,6 +103,38 @@
     // Keep the players selected — the same passer usually throws again — but
     // clear the yardage, which is different every play.
     yards = 0;
+  }
+
+  function recordPenalty() {
+    stats.addEvent(withGameContext({
+      id: newId(),
+      timestamp: Date.now(),
+      category: 'penalty',
+      action: penaltySide === 'offensive' ? 'penalty_offensive' : 'penalty_defensive',
+      // 'team' is the sentinel for a flag with nobody named. It aggregates into
+      // the team totals without inventing a roster player to hang it on.
+      primaryPlayerId: penaltyPlayerId || 'team',
+      yards: penaltyYards,
+      notes: penaltyName || undefined,
+    }, board));
+
+    // The name is the part that differs flag to flag; the side and yardage
+    // usually repeat, so they stay as they are.
+    penaltyName = '';
+  }
+
+  function saveEdit(updated) {
+    stats.updateEvent(updated.id, updated);
+    editing = null;
+  }
+
+  function recordAdjustment(partial) {
+    stats.addEvent(withGameContext({
+      ...partial,
+      id: newId(),
+      timestamp: Date.now(),
+    }, board));
+    adjusting = false;
   }
 
   function handleDelete(event, index) {
@@ -182,14 +241,29 @@
           {/each}
         </div>
 
-        <StatEntryPanel
-          {category}
-          roster={game.roster}
-          bind:primaryId
-          bind:secondaryId
-          bind:yards
-          onAction={record}
-        />
+        {#if category === 'penalty'}
+          <PenaltyPanel
+            roster={game.roster}
+            bind:side={penaltySide}
+            bind:playerId={penaltyPlayerId}
+            bind:penaltyName
+            bind:yards={penaltyYards}
+            onRecord={recordPenalty}
+          />
+        {:else}
+          <StatEntryPanel
+            {category}
+            roster={game.roster}
+            bind:primaryId
+            bind:secondaryId
+            bind:yards
+            onAction={record}
+          />
+        {/if}
+
+        <div class="st-divider"></div>
+
+        <DriveTracker currentDrive={game.currentDrive} completedDrives={game.completedDrives} />
 
         <div class="st-divider"></div>
         <OverlayControls />
@@ -207,12 +281,35 @@
           roster={game.roster}
           onUndo={() => stats.undoLastEvent()}
           onDelete={handleDelete}
-          onEdit={() => {}}
+          onEdit={(event) => (editing = event)}
         />
+
+        <div class="st-roster-row">
+          <span>Official correction after the fact?</span>
+          <button onclick={() => (adjusting = true)} class="st-btn">Adjust a stat</button>
+        </div>
       {/if}
     </div>
   {/if}
 </div>
+
+{#if editing}
+  <EventEditModal
+    event={editing}
+    roster={game.roster}
+    {board}
+    onSave={saveEdit}
+    onClose={() => (editing = null)}
+  />
+{/if}
+
+{#if adjusting}
+  <StatAdjustModal
+    roster={game.roster}
+    onRecord={recordAdjustment}
+    onClose={() => (adjusting = false)}
+  />
+{/if}
 
 <style>
   .st-body { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--c-bd-card); display: flex; flex-direction: column; gap: 16px; }

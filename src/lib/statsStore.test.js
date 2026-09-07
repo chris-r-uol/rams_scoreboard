@@ -24,6 +24,17 @@ async function freshStats() {
   return import('./statsStore.js');
 }
 
+/** A blank game, for tests that need a full wire payload. */
+function createEmptyStats() {
+  return {
+    gameId: '', gameDate: '2026-09-07', venue: '',
+    team: { name: 'HOME', abbreviation: 'HOME', primaryColor: '#002244', secondaryColor: '#869397', textColor: '#FFFFFF' },
+    roster: [], events: [], overlayMode: 'hidden', leaderboardCategory: 'rushing',
+    selectedOverlayPlayers: [], alertQueue: [], firedMilestones: [],
+    currentDrive: null, completedDrives: [], lastUpdated: Date.now(),
+  };
+}
+
 /** A rushing event, in the engine's own vocabulary. */
 function rush(id, yards, playerId = 'p1') {
   return {
@@ -112,7 +123,22 @@ describe('what travels', () => {
     // information twice.
     expect(wire.playerStats).toBeUndefined();
     expect(wire.teamStats).toBeUndefined();
-    expect(wire.completedDrives).toBeUndefined();
+  });
+
+  it('sends drives, which the log cannot reconstruct', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.startDrive(25);
+    stats.addEvent(rush('e1', 7));
+    stats.endDrive('touchdown');
+
+    const wire = sent[sent.length - 1];
+    // Where a drive started and how it ended are recorded nowhere else. Only
+    // its plays and yards are derived, and those are recomputed on arrival.
+    expect(wire.completedDrives).toHaveLength(1);
+    expect(wire.completedDrives[0].startYardLine).toBe(25);
+    expect(wire.completedDrives[0].result).toBe('touchdown');
   });
 
   it('rebuilds the derived fields on the receiving side', async () => {
@@ -395,5 +421,139 @@ describe('ownership', () => {
     // Without this flag the host would adopt its own game back from a client
     // repeating an old copy, undoing entries made since.
     expect(stats.isOwner()).toBe(true);
+  });
+});
+
+describe('drives', () => {
+  /** A defensive event, to prove drives count offensive snaps only. */
+  function tackle(id, playerId = 'p1') {
+    return { id, timestamp: Date.now(), category: 'defence', action: 'tackle', primaryPlayerId: playerId };
+  }
+
+  it('attaches offensive plays to the open drive and nothing else', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.startDrive(25);
+
+    stats.addEvent(rush('e1', 7));
+    stats.addEvent(tackle('e2'));
+    stats.addEvent(rush('e3', 12));
+
+    const drive = get(stats).currentDrive;
+    // A drive's play count should match the offence's snap count — a tackle
+    // that happened during it is not one of its plays.
+    expect(drive.plays).toBe(2);
+    expect(drive.yardsGained).toBe(19);
+    expect(drive.startYardLine).toBe(25);
+  });
+
+  it('records nothing against a drive that was never started', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.addEvent(rush('e1', 7));
+
+    expect(get(stats).currentDrive).toBeNull();
+    // The play still counts for the player — drives are a grouping, not a gate.
+    expect(get(stats).playerStats.p1.rushing.yards).toBe(7);
+  });
+
+  it('recounts the drive when one of its plays is deleted', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.startDrive();
+
+    stats.addEvent(rush('e1', 7));
+    stats.addEvent(rush('e2', 12));
+    stats.removeEvent('e1');
+
+    const drive = get(stats).currentDrive;
+    // Totals are recomputed from the events the drive still points at, so this
+    // comes out right without any per-action reversal.
+    expect(drive.plays).toBe(1);
+    expect(drive.yardsGained).toBe(12);
+  });
+
+  it('closes a drive with its result and starts the next one empty', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.startDrive(20);
+    stats.addEvent(rush('e1', 7));
+    stats.endDrive('punt');
+
+    let state = get(stats);
+    expect(state.currentDrive).toBeNull();
+    expect(state.completedDrives).toHaveLength(1);
+    expect(state.completedDrives[0].result).toBe('punt');
+    expect(state.completedDrives[0].plays).toBe(1);
+
+    stats.startDrive(40);
+    stats.addEvent(rush('e2', 3));
+
+    state = get(stats);
+    expect(state.currentDrive.plays).toBe(1);
+    // The finished drive is untouched by what happens on the next one.
+    expect(state.completedDrives[0].plays).toBe(1);
+  });
+
+  it('drops the grouping but keeps the plays when a drive is cancelled', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.startDrive();
+    stats.addEvent(rush('e1', 7));
+
+    stats.cancelDrive();
+
+    expect(get(stats).currentDrive).toBeNull();
+    expect(get(stats).completedDrives).toHaveLength(0);
+    // Started by mistake is not the same as did not happen.
+    expect(get(stats).events).toHaveLength(1);
+    expect(get(stats).playerStats.p1.rushing.yards).toBe(7);
+  });
+
+  it('ignores an end with no drive open', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+
+    stats.endDrive('touchdown');
+
+    expect(get(stats).completedDrives).toHaveLength(0);
+  });
+
+  it('carries drives on the wire so the overlay panel can show them', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.startDrive(25);
+    stats.addEvent(rush('e1', 7));
+
+    // currentDrive is derived — only the id list travels — so what matters is
+    // that the receiver rebuilds the same totals from the log.
+    const rebuilt = await freshStats();
+    rebuilt.stats.applyRemote(stats.wire());
+
+    expect(get(rebuilt.stats).currentDrive.plays).toBe(1);
+    expect(get(rebuilt.stats).currentDrive.yardsGained).toBe(7);
+  });
+});
+
+describe('viewer', () => {
+  it('gives up ownership so a hash route to the overlay still receives stats', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+
+    // The overlay lives at a hash route, so reaching it from the controller
+    // never reloads the page and the module-scope flag would otherwise stay set.
+    stats.becomeViewer();
+
+    expect(stats.isOwner()).toBe(false);
+    stats.applyRemote({ ...createEmptyStats(), overlayMode: 'leaderboard' });
+    expect(get(stats).overlayMode).toBe('leaderboard');
   });
 });

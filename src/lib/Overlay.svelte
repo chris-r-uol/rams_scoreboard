@@ -31,6 +31,11 @@
   scoreboard.subscribe((s) => { state = s; });
 
   // Stats arrive on their own Realtime event, wired up by connectRealtime.
+  //
+  // Declared a viewer explicitly rather than relying on never having been a
+  // controller: the store is module scope, and hash-routing here from the
+  // controller does not reload the page.
+  stats.becomeViewer();
   let game = $state(stats.get());
   stats.subscribe((s) => { game = s; });
 

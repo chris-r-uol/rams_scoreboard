@@ -2,6 +2,7 @@
   import ControllerShell from '../ControllerShell.svelte';
   import TeamSetup from '../TeamSetup.svelte';
   import StatTracking from '../stats/ui/StatTracking.svelte';
+  import GameSummary from '../stats/ui/GameSummary.svelte';
   import {
     scoreboard, formatGameClock, quarterLabel, downLabel,
     startGameClockInterval, stopGameClockInterval,
@@ -343,6 +344,7 @@
   <!-- Live stat entry. Football only: the stat engine's categories, actions and
        drives are all American football, so no other sport shows this. -->
   <StatTracking />
+<GameSummary />
 
 </ControllerShell>
 
