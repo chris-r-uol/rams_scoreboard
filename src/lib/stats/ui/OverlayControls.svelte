@@ -45,6 +45,7 @@
     { id: 'tackles', label: 'Tackles' },
     { id: 'sacks', label: 'Sacks' },
     { id: 'touchdowns', label: 'Touchdowns' },
+    { id: 'kicking', label: 'Kicking' },
   ];
 
   const mode = $derived(game.overlayMode ?? 'hidden');

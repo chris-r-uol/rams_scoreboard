@@ -107,6 +107,43 @@ export function calculateStats(
 				primary.penalties.defensiveYards += Math.abs(yards);
 				break;
 
+			// ── Kicking ────────────────────────────────────────────────────────
+			// `yards` is the attempt distance, not a gain, so none of these feed
+			// the offensive yardage totals.
+			case 'field_goal_made':
+				primary.kicking.fieldGoalsAttempted += 1;
+				primary.kicking.fieldGoalsMade += 1;
+				primary.kicking.longestFieldGoal = Math.max(primary.kicking.longestFieldGoal, yards);
+				break;
+
+			case 'field_goal_missed':
+				primary.kicking.fieldGoalsAttempted += 1;
+				break;
+
+			case 'extra_point_made':
+				primary.kicking.extraPointsAttempted += 1;
+				primary.kicking.extraPointsMade += 1;
+				break;
+
+			case 'extra_point_missed':
+				primary.kicking.extraPointsAttempted += 1;
+				break;
+
+			case 'punt':
+				primary.kicking.punts += 1;
+				primary.kicking.puntYards += yards;
+				break;
+
+			// Credited to whoever carried or caught it, not to a kicker.
+			case 'two_point_made':
+				primary.conversions.twoPointAttempted += 1;
+				primary.conversions.twoPointMade += 1;
+				break;
+
+			case 'two_point_failed':
+				primary.conversions.twoPointAttempted += 1;
+				break;
+
 			// ── Manual adjustment ──────────────────────────────────────────────
 			// statKey is a dotted path like "rushing.yards"; `yards` carries the
 			// signed delta. Recorded as a real event so corrections stay visible
@@ -148,6 +185,20 @@ export function calculateStats(
 		teamStats.defence.interceptions += ps.defence.interceptions;
 		teamStats.defence.forcedFumbles += ps.defence.forcedFumbles;
 
+		teamStats.kicking.fieldGoalsMade += ps.kicking.fieldGoalsMade;
+		teamStats.kicking.fieldGoalsAttempted += ps.kicking.fieldGoalsAttempted;
+		teamStats.kicking.longestFieldGoal = Math.max(
+			teamStats.kicking.longestFieldGoal,
+			ps.kicking.longestFieldGoal
+		);
+		teamStats.kicking.extraPointsMade += ps.kicking.extraPointsMade;
+		teamStats.kicking.extraPointsAttempted += ps.kicking.extraPointsAttempted;
+		teamStats.kicking.punts += ps.kicking.punts;
+		teamStats.kicking.puntYards += ps.kicking.puntYards;
+
+		teamStats.conversions.twoPointMade += ps.conversions.twoPointMade;
+		teamStats.conversions.twoPointAttempted += ps.conversions.twoPointAttempted;
+
 		teamStats.penalties.offensiveCount += ps.penalties.offensiveCount;
 		teamStats.penalties.offensiveYards += ps.penalties.offensiveYards;
 		teamStats.penalties.defensiveCount += ps.penalties.defensiveCount;
@@ -158,6 +209,15 @@ export function calculateStats(
 	teamStats.totalTouchdowns =
 		teamStats.passing.touchdowns + teamStats.rushing.touchdowns;
 	teamStats.totalOffensivePlays = teamStats.passing.attempts + teamStats.rushing.attempts;
+
+	// What has actually been recorded adds up to. A defensive or return score
+	// has no action to record it against, so this can legitimately sit below the
+	// scoreboard — see TeamStats.totalPoints.
+	teamStats.totalPoints =
+		teamStats.totalTouchdowns * 6 +
+		teamStats.kicking.fieldGoalsMade * 3 +
+		teamStats.kicking.extraPointsMade +
+		teamStats.conversions.twoPointMade * 2;
 
 	return { playerStats, teamStats };
 }

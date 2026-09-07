@@ -29,6 +29,14 @@ export const STAT_ACTIONS: ActionMeta[] = [
 	{ action: 'sack', label: 'Sack', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: -7, tone: 'bg-red-700 hover:bg-red-600' },
 	{ action: 'interception', label: 'INT', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-purple-700 hover:bg-purple-600' },
 	{ action: 'forced_fumble', label: 'FF', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-yellow-700 hover:bg-yellow-600' },
+	// Kicking. Distances go in `yards`; a 38-yard field goal is a 38, not a gain.
+	{ action: 'field_goal_made', label: 'FG Good 🏈', category: 'kicking', requiresReceiver: false, requiresYards: true, defaultYards: 30, tone: 'bg-green-700 hover:bg-green-600', role: 'primary' },
+	{ action: 'field_goal_missed', label: 'FG Missed', category: 'kicking', requiresReceiver: false, requiresYards: true, defaultYards: 30, tone: 'bg-gray-700 hover:bg-gray-600' },
+	{ action: 'extra_point_made', label: 'XP Good', category: 'kicking', requiresReceiver: false, requiresYards: false, tone: 'bg-green-800 hover:bg-green-700' },
+	{ action: 'extra_point_missed', label: 'XP Missed', category: 'kicking', requiresReceiver: false, requiresYards: false, tone: 'bg-gray-700 hover:bg-gray-600' },
+	{ action: 'two_point_made', label: '2PT Good', category: 'kicking', requiresReceiver: false, requiresYards: false, tone: 'bg-green-700 hover:bg-green-600' },
+	{ action: 'two_point_failed', label: '2PT Failed', category: 'kicking', requiresReceiver: false, requiresYards: false, tone: 'bg-gray-700 hover:bg-gray-600' },
+	{ action: 'punt', label: 'Punt', category: 'kicking', requiresReceiver: false, requiresYards: true, defaultYards: 35, tone: 'bg-blue-700 hover:bg-blue-600' },
 	// Penalties
 	{ action: 'penalty_offensive', label: 'Offensive Penalty', category: 'penalty', requiresReceiver: false, requiresYards: true, tone: 'bg-orange-700 hover:bg-orange-600', role: 'primary' },
 	{ action: 'penalty_defensive', label: 'Defensive Penalty', category: 'penalty', requiresReceiver: false, requiresYards: true, tone: 'bg-blue-700 hover:bg-blue-600' }
