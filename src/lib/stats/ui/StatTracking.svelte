@@ -70,6 +70,7 @@
     { id: 'passing', label: 'Passing' },
     { id: 'rushing', label: 'Rushing' },
     { id: 'defence', label: 'Defence' },
+    { id: 'kicking', label: 'Kicking' },
     { id: 'penalty', label: 'Penalty' },
   ];
 
@@ -93,7 +94,7 @@
     stats.addEvent(withGameContext({
       id: newId(),
       timestamp: Date.now(),
-      category,
+      category: meta?.category ?? category,
       action,
       primaryPlayerId: primaryId,
       secondaryPlayerId: meta?.requiresReceiver ? secondaryId || undefined : undefined,

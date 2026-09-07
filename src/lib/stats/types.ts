@@ -1,6 +1,6 @@
 // ─── Type definitions for the football stats tracker ───
 
-export type StatCategory = 'passing' | 'rushing' | 'receiving' | 'defence' | 'penalty' | 'adjustment';
+export type StatCategory = 'passing' | 'rushing' | 'receiving' | 'defence' | 'kicking' | 'penalty' | 'adjustment';
 
 export type StatAction =
 	// Passing
@@ -17,6 +17,18 @@ export type StatAction =
 	| 'sack'
 	| 'interception'
 	| 'forced_fumble'
+	// Kicking. Field goals carry the attempt distance in `yards`; a miss is
+	// recorded too, because a kicker's line is meaningless without the attempts.
+	| 'field_goal_made'
+	| 'field_goal_missed'
+	| 'extra_point_made'
+	| 'extra_point_missed'
+	| 'punt'
+	// Two-point conversions are a run or a pass, not a kick, so they are
+	// credited to whoever scored. They live in the kicking entry panel because
+	// that is where an operator looks after a touchdown.
+	| 'two_point_made'
+	| 'two_point_failed'
 	// Penalties
 	| 'penalty_offensive'
 	| 'penalty_defensive'
@@ -25,7 +37,7 @@ export type StatAction =
 
 export type OverlayMode = 'hidden' | 'team_stats' | 'featured_player' | 'leaderboard' | 'last_5_plays' | 'run_pass_chart' | 'drive_summary';
 
-export type LeaderboardCategory = 'passing' | 'rushing' | 'receiving' | 'tackles' | 'sacks' | 'touchdowns';
+export type LeaderboardCategory = 'passing' | 'rushing' | 'receiving' | 'tackles' | 'sacks' | 'touchdowns' | 'kicking';
 
 export interface TeamConfig {
 	name: string;
@@ -95,12 +107,30 @@ export interface PenaltyStats {
 	defensiveYards: number;
 }
 
+export interface KickingStats {
+	fieldGoalsMade: number;
+	fieldGoalsAttempted: number;
+	/** Distance of the longest made field goal; 0 when none have been made. */
+	longestFieldGoal: number;
+	extraPointsMade: number;
+	extraPointsAttempted: number;
+	punts: number;
+	puntYards: number;
+}
+
+export interface ConversionStats {
+	twoPointMade: number;
+	twoPointAttempted: number;
+}
+
 export interface PlayerStats {
 	playerId: string;
 	passing: PassingStats;
 	rushing: RushingStats;
 	receiving: ReceivingStats;
 	defence: DefenceStats;
+	kicking: KickingStats;
+	conversions: ConversionStats;
 	penalties: PenaltyStats;
 }
 
@@ -109,10 +139,21 @@ export interface TeamStats {
 	rushing: RushingStats;
 	receiving: ReceivingStats;
 	defence: DefenceStats;
+	kicking: KickingStats;
+	conversions: ConversionStats;
 	penalties: PenaltyStats;
 	totalOffensiveYards: number;
 	totalTouchdowns: number;
 	totalOffensivePlays: number;
+	/**
+	 * Points this team has scored, from what has actually been recorded.
+	 *
+	 * Touchdowns, field goals, extra points and two-point conversions. It will
+	 * not match the scoreboard if points were scored by the defence or on a
+	 * return, because the engine has no way to record those yet — so treat a
+	 * gap as "something happened that nobody entered", not as an error.
+	 */
+	totalPoints: number;
 }
 
 export interface GameState {

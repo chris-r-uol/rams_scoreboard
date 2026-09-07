@@ -62,6 +62,19 @@ function pct(a: number, b: number): string {
 			</div>
 		</div>
 
+		<!-- Kicking — only shown once someone has kicked -->
+		{#if ts.kicking.fieldGoalsAttempted > 0 || ts.kicking.extraPointsAttempted > 0 || ts.conversions.twoPointMade > 0}
+		<div style="display:flex;align-items:baseline;gap:12px;">
+			<span style="width:44px;font-size:0.65rem;opacity:0.65;text-transform:uppercase;letter-spacing:0.1em;flex-shrink:0;">KICK</span>
+			<div style="display:flex;gap:16px;font-size:0.82rem;font-weight:600;font-variant-numeric:tabular-nums;flex-wrap:wrap;">
+				{#if ts.kicking.fieldGoalsAttempted > 0}<span>{ts.kicking.fieldGoalsMade}/{ts.kicking.fieldGoalsAttempted} FG</span>{/if}
+				{#if ts.kicking.longestFieldGoal > 0}<span style="opacity:0.7;">LNG {ts.kicking.longestFieldGoal}</span>{/if}
+				{#if ts.kicking.extraPointsAttempted > 0}<span>{ts.kicking.extraPointsMade}/{ts.kicking.extraPointsAttempted} XP</span>{/if}
+				{#if ts.conversions.twoPointMade > 0}<span>{ts.conversions.twoPointMade} 2PT</span>{/if}
+			</div>
+		</div>
+		{/if}
+
 		<!-- Penalties — only shown if any recorded -->
 		{#if ts.penalties.offensiveCount > 0 || ts.penalties.defensiveCount > 0}
 		<div style="display:flex;align-items:baseline;gap:12px;">

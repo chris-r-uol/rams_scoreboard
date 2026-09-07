@@ -161,6 +161,22 @@ export function detectAlerts(
 			push('big_play', 'SACK!', `${label(primary)} — ${Math.abs(yards)} YDS`, primary, yards);
 			break;
 
+		// A made field goal is a score, so it always earns a card. `yards` here is
+		// the attempt distance, which is why it reads "38 YARDS" rather than being
+		// passed as a gain.
+		case 'field_goal_made':
+			push(
+				'big_play',
+				yards >= 40 ? 'BIG FIELD GOAL!' : 'FIELD GOAL!',
+				`${label(primary)} — ${yards} YARDS`,
+				primary
+			);
+			break;
+
+		case 'two_point_made':
+			push('big_play', 'TWO-POINT CONVERSION!', label(primary), primary);
+			break;
+
 		case 'rush_attempt':
 			if (yards >= 20) {
 				push('big_play', 'BIG RUN!', `${label(primary)} — ${yards} YDS`, primary, yards);

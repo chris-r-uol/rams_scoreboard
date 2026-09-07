@@ -9,6 +9,7 @@
  */
 import type { GameState, Player, PlayerStats } from './types';
 import { buildXlsx } from './xlsxWriter';
+import { emptyPlayerStats } from './emptyStats';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,16 @@ function buildTeamSummaryRows(state: GameState): (string | number)[][] {
 		['Interceptions', ts.defence.interceptions],
 		['Forced Fumbles', ts.defence.forcedFumbles],
 		[],
+		['KICKING'],
+		['Field Goals', `${ts.kicking.fieldGoalsMade}/${ts.kicking.fieldGoalsAttempted}`],
+		['Field Goal %', pct(ts.kicking.fieldGoalsMade, ts.kicking.fieldGoalsAttempted)],
+		['Longest Field Goal', ts.kicking.longestFieldGoal],
+		['Extra Points', `${ts.kicking.extraPointsMade}/${ts.kicking.extraPointsAttempted}`],
+		['Two-Point Conversions', `${ts.conversions.twoPointMade}/${ts.conversions.twoPointAttempted}`],
+		['Punts', ts.kicking.punts],
+		['Punt Yards', ts.kicking.puntYards],
+		['Yards per Punt', avg(ts.kicking.puntYards, ts.kicking.punts)],
+		[],
 		['PENALTIES'],
 		['Offensive Penalties', ts.penalties.offensiveCount],
 		['Offensive Yards Lost', ts.penalties.offensiveYards],
@@ -99,7 +110,13 @@ function buildTeamSummaryRows(state: GameState): (string | number)[][] {
 		['OVERALL'],
 		['Total Offensive Yards', ts.totalOffensiveYards],
 		['Total Touchdowns', ts.totalTouchdowns],
-		['Total Offensive Plays', ts.totalOffensivePlays]
+		['Total Offensive Plays', ts.totalOffensivePlays],
+		[],
+		['POINTS FROM RECORDED PLAYS', ts.totalPoints],
+		['  Touchdowns', ts.totalTouchdowns * 6],
+		['  Field Goals', ts.kicking.fieldGoalsMade * 3],
+		['  Extra Points', ts.kicking.extraPointsMade],
+		['  Two-Point Conversions', ts.conversions.twoPointMade * 2]
 	];
 }
 
@@ -110,19 +127,16 @@ function buildPlayerRows(state: GameState): (string | number)[][] {
 		'Rush Att', 'Rush Yds', 'Yds/Car', 'Rush TD',
 		'Rec', 'Rec Yds', 'Yds/Rec', 'Rec TD',
 		'Tackles', 'TFL', 'Sacks', 'Sack Yds', 'Def INT', 'FF',
+		'FG Made', 'FG Att', 'FG Long', 'XP Made', 'XP Att', 'Punts', 'Punt Yds', '2PT',
 		'Off Pen', 'Off Pen Yds', 'Def Pen', 'Def Pen Yds'
 	];
 	const rows: (string | number)[][] = [header];
 
 	for (const player of state.roster) {
-		const ps: PlayerStats = state.playerStats[player.id] ?? {
-			playerId: player.id,
-			passing: { attempts: 0, completions: 0, yards: 0, touchdowns: 0, interceptions: 0 },
-			rushing: { attempts: 0, yards: 0, touchdowns: 0 },
-			receiving: { receptions: 0, yards: 0, touchdowns: 0 },
-			defence: { tackles: 0, tacklesForLoss: 0, sacks: 0, sackYards: 0, interceptions: 0, forcedFumbles: 0 },
-			penalties: { offensiveCount: 0, offensiveYards: 0, defensiveCount: 0, defensiveYards: 0 }
-		};
+		// Shared with the engine rather than restated here. The zero row was a
+		// second copy of the shape, and adding kicking to one and not the other
+		// is exactly how a column ends up silently blank for unused players.
+		const ps: PlayerStats = state.playerStats[player.id] ?? emptyPlayerStats(player.id);
 		rows.push([
 			player.number,
 			player.playerName,
@@ -148,6 +162,14 @@ function buildPlayerRows(state: GameState): (string | number)[][] {
 			ps.defence.sackYards,
 			ps.defence.interceptions,
 			ps.defence.forcedFumbles,
+			ps.kicking.fieldGoalsMade,
+			ps.kicking.fieldGoalsAttempted,
+			ps.kicking.longestFieldGoal,
+			ps.kicking.extraPointsMade,
+			ps.kicking.extraPointsAttempted,
+			ps.kicking.punts,
+			ps.kicking.puntYards,
+			ps.conversions.twoPointMade,
 			ps.penalties.offensiveCount,
 			ps.penalties.offensiveYards,
 			ps.penalties.defensiveCount,

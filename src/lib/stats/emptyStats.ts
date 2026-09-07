@@ -14,6 +14,8 @@ export function emptyPlayerStats(playerId: string): PlayerStats {
 		rushing: { attempts: 0, yards: 0, touchdowns: 0 },
 		receiving: { receptions: 0, yards: 0, touchdowns: 0 },
 		defence: { tackles: 0, tacklesForLoss: 0, sacks: 0, sackYards: 0, interceptions: 0, forcedFumbles: 0 },
+		kicking: { fieldGoalsMade: 0, fieldGoalsAttempted: 0, longestFieldGoal: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0 },
+		conversions: { twoPointMade: 0, twoPointAttempted: 0 },
 		penalties: { offensiveCount: 0, offensiveYards: 0, defensiveCount: 0, defensiveYards: 0 }
 	};
 }
@@ -24,9 +26,12 @@ export function emptyTeamStats(): TeamStats {
 		rushing: { attempts: 0, yards: 0, touchdowns: 0 },
 		receiving: { receptions: 0, yards: 0, touchdowns: 0 },
 		defence: { tackles: 0, tacklesForLoss: 0, sacks: 0, sackYards: 0, interceptions: 0, forcedFumbles: 0 },
+		kicking: { fieldGoalsMade: 0, fieldGoalsAttempted: 0, longestFieldGoal: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0 },
+		conversions: { twoPointMade: 0, twoPointAttempted: 0 },
 		penalties: { offensiveCount: 0, offensiveYards: 0, defensiveCount: 0, defensiveYards: 0 },
 		totalOffensiveYards: 0,
 		totalTouchdowns: 0,
-		totalOffensivePlays: 0
+		totalOffensivePlays: 0,
+		totalPoints: 0
 	};
 }

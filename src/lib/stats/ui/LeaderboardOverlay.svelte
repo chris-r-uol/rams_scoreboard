@@ -24,6 +24,12 @@
 				case 'receiving': value = ps.receiving.yards; label = `${ps.receiving.yards} YDS`; break;
 				case 'tackles': value = ps.defence.tackles; label = `${ps.defence.tackles} TKL`; break;
 				case 'sacks': value = ps.defence.sacks; label = `${ps.defence.sacks} SK`; break;
+				case 'kicking':
+					// Ranked on points contributed, which is what a kicker is for;
+					// the label still shows the record behind it.
+					value = ps.kicking.fieldGoalsMade * 3 + ps.kicking.extraPointsMade;
+					label = `${ps.kicking.fieldGoalsMade}/${ps.kicking.fieldGoalsAttempted} FG · ${ps.kicking.extraPointsMade}/${ps.kicking.extraPointsAttempted} XP`;
+					break;
 				case 'touchdowns':
 					value = ps.passing.touchdowns + ps.rushing.touchdowns + ps.receiving.touchdowns;
 					label = `${value} TD`;
@@ -42,7 +48,8 @@
 		receiving: 'RECEIVING LEADERS',
 		tackles: 'TACKLES LEADERS',
 		sacks: 'SACKS LEADERS',
-		touchdowns: 'TOUCHDOWN LEADERS'
+		touchdowns: 'TOUCHDOWN LEADERS',
+		kicking: 'KICKING'
 	};
 
 	const leaders = $derived(getLeaders());

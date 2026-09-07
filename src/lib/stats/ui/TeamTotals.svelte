@@ -62,6 +62,21 @@
 				<div class="flex justify-between"><span>Total Yds</span><span class="font-mono font-semibold">{stats.totalOffensiveYards}</span></div>
 				<div class="flex justify-between"><span>Total TDs</span><span class="font-mono font-semibold">{stats.totalTouchdowns}</span></div>
 				<div class="flex justify-between"><span>Total Plays</span><span class="font-mono font-semibold">{stats.totalOffensivePlays}</span></div>
+				<div class="flex justify-between"><span>Points</span><span class="font-mono font-semibold">{stats.totalPoints}</span></div>
+			</div>
+		</div>
+
+		<!-- Kicking -->
+		<div class="rounded-lg bg-gray-800 p-3">
+			<p class="mb-2 text-xs font-bold uppercase text-yellow-400">Kicking</p>
+			<div class="space-y-1 text-gray-200">
+				<div class="flex justify-between"><span>Field Goals</span><span class="font-mono font-semibold">{stats.kicking.fieldGoalsMade}/{stats.kicking.fieldGoalsAttempted}</span></div>
+				<div class="flex justify-between"><span>FG%</span><span class="font-mono font-semibold">{pct(stats.kicking.fieldGoalsMade, stats.kicking.fieldGoalsAttempted)}</span></div>
+				<div class="flex justify-between"><span>Longest</span><span class="font-mono font-semibold">{stats.kicking.longestFieldGoal || '—'}</span></div>
+				<div class="flex justify-between"><span>Extra Points</span><span class="font-mono font-semibold">{stats.kicking.extraPointsMade}/{stats.kicking.extraPointsAttempted}</span></div>
+				<div class="flex justify-between"><span>2PT</span><span class="font-mono font-semibold">{stats.conversions.twoPointMade}/{stats.conversions.twoPointAttempted}</span></div>
+				<div class="flex justify-between"><span>Punts</span><span class="font-mono font-semibold">{stats.kicking.punts}</span></div>
+				<div class="flex justify-between"><span>Yds/Punt</span><span class="font-mono font-semibold">{avg(stats.kicking.puntYards, stats.kicking.punts)}</span></div>
 			</div>
 		</div>
 
