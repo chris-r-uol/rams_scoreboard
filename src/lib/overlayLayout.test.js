@@ -10,8 +10,16 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  OVERLAY_POSITIONS, overlayAnchorStyle, clampScale, positionLabel,
-  SCALE_MIN, SCALE_MAX, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE,
+  OVERLAY_POSITIONS,
+  overlayAnchorStyle,
+  clampScale,
+  positionLabel,
+  SCALE_MIN,
+  SCALE_MAX,
+  DEFAULT_OVERLAY_POSITION,
+  DEFAULT_OVERLAY_SCALE,
+  STATS_PLACEMENTS,
+  DEFAULT_STATS_PLACEMENT,
 } from './overlayLayout.js';
 
 /** Pull a custom property out of the generated style string. */
@@ -93,5 +101,22 @@ describe('positionLabel', () => {
   it('reads as words for the accessible name', () => {
     expect(positionLabel('bottom-right')).toBe('Bottom Right');
     expect(positionLabel('center')).toBe('Center');
+  });
+});
+
+describe('stack alignment', () => {
+  it('lines the stack up with the edge it is anchored to', () => {
+    // A bug in the top-left with a panel above it should share a left edge.
+    // Centring them on each other reads as two unrelated graphics.
+    expect(overlayAnchorStyle('top-left', 1)).toContain('--sb-align: flex-start');
+    expect(overlayAnchorStyle('bottom-right', 1)).toContain('--sb-align: flex-end');
+    expect(overlayAnchorStyle('bottom-center', 1)).toContain('--sb-align: center');
+  });
+
+  it('offers exactly two placements for a stat panel', () => {
+    // Deliberately not the nine the scorebug has: a panel with a free anchor of
+    // its own could be put straight over the score.
+    expect(STATS_PLACEMENTS).toEqual(['above', 'below']);
+    expect(STATS_PLACEMENTS).toContain(DEFAULT_STATS_PLACEMENT);
   });
 });

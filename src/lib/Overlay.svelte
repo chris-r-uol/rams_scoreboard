@@ -10,7 +10,10 @@
   import { stats } from './statsStore.js';
   import { getRoomFromUrl } from './room.js';
   import { leaveRoom } from './realtime.js';
-  import { overlayAnchorStyle, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE } from './overlayLayout.js';
+  import {
+    overlayAnchorStyle, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE,
+    DEFAULT_STATS_PLACEMENT,
+  } from './overlayLayout.js';
   import { sponsorVisible, currentSponsor } from './sponsors.js';
   import FootballOverlay from './sports/FootballOverlay.svelte';
   import SoccerOverlay from './sports/SoccerOverlay.svelte';
@@ -81,13 +84,9 @@
 
   // ── Stat panels ──────────────────────────────────────────
   // Football only: every category the stat engine knows is American football.
-  // Anchored separately from the scorebug — see statsOverlayPosition.
-  const statsAnchorStyle = $derived(
-    overlayAnchorStyle(
-      state.statsOverlayPosition ?? 'bottom-left',
-      state.statsOverlayScale ?? DEFAULT_OVERLAY_SCALE,
-    ),
-  );
+  // Stacked with the scorebug rather than anchored on their own — see
+  // statsPlacement in store.js.
+  const statsPlacement = $derived(state.statsPlacement ?? DEFAULT_STATS_PLACEMENT);
 
   const statsOn = $derived(state.sport === 'american-football');
 
@@ -116,7 +115,34 @@
     Waiting for sport selection…
   </div>
 {:else}
-<div class="stage" style={anchorStyle} data-placement={state.sponsorPlacement ?? 'below'}>
+<!--
+  One anchored stack: stat panel, scorebug, sponsor. Everything moves and scales
+  together, and because they are siblings in a flex column rather than separately
+  positioned layers, a panel physically cannot land on top of the score.
+-->
+<div class="stage" style={anchorStyle} data-stats={statsPlacement}>
+
+{#if statsMode !== 'hidden'}
+  <div class="stats-panel">
+    {#if activeAlert}
+      <AlertOverlay alert={activeAlert} team={game.team} {now} />
+    {:else if statsMode === 'team_stats'}
+      <StatsPanelOverlay state={game} />
+    {:else if statsMode === 'featured_player'}
+      <FeaturedPlayerOverlay state={game} />
+    {:else if statsMode === 'leaderboard'}
+      <LeaderboardOverlay state={game} />
+    {:else if statsMode === 'last_5_plays'}
+      <Last5PlaysOverlay state={game} />
+    {:else if statsMode === 'run_pass_chart'}
+      <RunPassChartOverlay state={game} />
+    {:else if statsMode === 'drive_summary'}
+      <DriveSummaryOverlay state={game} />
+    {/if}
+  </div>
+{/if}
+
+<div class="bug-group" data-placement={state.sponsorPlacement ?? 'below'}>
 <div class="bug">
 {#if state.sport === 'american-football'}
   <FootballOverlay />
@@ -141,26 +167,7 @@
 {/if}
 
 </div>
-
-{#if statsMode !== 'hidden'}
-  <div class="stats-stage" style={statsAnchorStyle}>
-    {#if activeAlert}
-      <AlertOverlay alert={activeAlert} team={game.team} {now} />
-    {:else if statsMode === 'team_stats'}
-      <StatsPanelOverlay state={game} />
-    {:else if statsMode === 'featured_player'}
-      <FeaturedPlayerOverlay state={game} />
-    {:else if statsMode === 'leaderboard'}
-      <LeaderboardOverlay state={game} />
-    {:else if statsMode === 'last_5_plays'}
-      <Last5PlaysOverlay state={game} />
-    {:else if statsMode === 'run_pass_chart'}
-      <RunPassChartOverlay state={game} />
-    {:else if statsMode === 'drive_summary'}
-      <DriveSummaryOverlay state={game} />
-    {/if}
-  </div>
-{/if}
+</div>
 
 <!--
   Free-tier watermark. Deliberately small and low-contrast: it should be a
@@ -177,36 +184,36 @@
 {/if}
 
 <style>
-  /* The anchored unit: scorebug plus any sponsor panel, moved and scaled
-     together so a sponsor never drifts away from the bug at other scales. */
+  /* The anchored unit: stat panel, scorebug and any sponsor, moved and scaled
+     together so nothing drifts apart at other scales. */
   .stage {
     position: fixed;
     inset: var(--sb-inset, auto auto 48px 50%);
     transform: var(--sb-translate, translateX(-50%)) scale(var(--sb-scale, 1));
     transform-origin: var(--sb-origin, bottom center);
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    /* Line the stack up with the edge it is anchored to: a top-left bug and the
+       panel above it share a left edge rather than being centred on each other. */
+    align-items: var(--sb-align, center);
     gap: 10px;
     pointer-events: none;
     z-index: 9999;
   }
-  .stage[data-placement="below"] { flex-direction: column; }
-  .stage[data-placement="above"] { flex-direction: column-reverse; }
-  .stage[data-placement="right"] { flex-direction: row; }
-  .stage[data-placement="left"]  { flex-direction: row-reverse; }
+  /* "Below" reverses the column, so the panel renders after the bug. The stack
+     still grows away from the anchored edge, so neither can leave the canvas. */
+  .stage[data-stats="below"] { flex-direction: column-reverse; }
+
+  /* The scorebug and its sponsor, which has its own placement around the bug. */
+  .bug-group { display: flex; align-items: center; gap: 10px; }
+  .bug-group[data-placement="below"] { flex-direction: column; }
+  .bug-group[data-placement="above"] { flex-direction: column-reverse; }
+  .bug-group[data-placement="right"] { flex-direction: row; }
+  .bug-group[data-placement="left"]  { flex-direction: row-reverse; }
 
   .bug { display: flex; }
 
-  /* Same anchor mechanism as .stage, its own position and scale. Not a flex
-     row: only ever one panel is up at a time. */
-  .stats-stage {
-    position: fixed;
-    inset: var(--sb-inset, auto auto 48px 48px);
-    transform: var(--sb-translate, translate(0)) scale(var(--sb-scale, 1));
-    transform-origin: var(--sb-origin, bottom left);
-    pointer-events: none;
-    z-index: 9998;
-  }
+  .stats-panel { display: flex; }
 
   .sponsor {
     display: block;
