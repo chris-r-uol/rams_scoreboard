@@ -94,6 +94,15 @@ export function sendStateNow(state) {
 }
 
 /**
+ * Send the stats log. Coalesced like state, and sent only when it changes —
+ * never on the heartbeat, because the log only grows.
+ */
+export function sendStats(stats) {
+  if (!channel || currentRole !== 'host') return;
+  rawSend('stats', { stats });
+}
+
+/**
  * Join a scoreboard room.
  *
  * @param {string} roomId
@@ -102,7 +111,7 @@ export function sendStateNow(state) {
  * @param {(state: object, sentAt?: number) => void} [opts.onState] viewer: incoming state
  * @param {() => void} [opts.onStateRequest]           host: a viewer wants a snapshot
  */
-export function joinRoom(roomId, { role, onState, onStateRequest } = {}) {
+export function joinRoom(roomId, { role, onState, onStateRequest, onStats, onStatsRequest } = {}) {
   if (!supabase) {
     console.error('[realtime] Supabase client unavailable — check VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.');
     realtimeStatus.set('unavailable');
@@ -128,11 +137,21 @@ export function joinRoom(roomId, { role, onState, onStateRequest } = {}) {
     channel.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload?.state) onState?.(payload.state, payload.sentAt);
     });
+    // Stats travel on their own event rather than inside scoreboard state.
+    // They change on a different rhythm — an entry every few plays rather than
+    // continuously — and the log only grows, so carrying it on the 5s heartbeat
+    // would re-send the whole match every five seconds for no new information.
+    channel.on('broadcast', { event: 'stats' }, ({ payload }) => {
+      if (payload?.stats) onStats?.(payload.stats);
+    });
   }
 
   if (role === 'host') {
     channel.on('broadcast', { event: 'request-state' }, () => {
       onStateRequest?.();
+    });
+    channel.on('broadcast', { event: 'request-stats' }, () => {
+      onStatsRequest?.();
     });
   }
 
@@ -142,10 +161,16 @@ export function joinRoom(roomId, { role, onState, onStateRequest } = {}) {
       realtimeStatus.set('connected');
       // A viewer joining mid-game needs the current state right away —
       // broadcast is fire-and-forget, so nothing arrives until the next change.
-      if (role === 'viewer') rawSend('request-state', {});
+      if (role === 'viewer') {
+        rawSend('request-state', {});
+        rawSend('request-stats', {});
+      }
       // A host that just (re)connected pushes a fresh snapshot, so an overlay
       // that was already waiting converges without a round trip.
-      if (role === 'host') onStateRequest?.();
+      if (role === 'host') {
+        onStateRequest?.();
+        onStatsRequest?.();
+      }
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
       connected = false;
       realtimeStatus.set('error');

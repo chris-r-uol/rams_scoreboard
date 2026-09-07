@@ -29,7 +29,8 @@
  */
 
 import { writable, get } from 'svelte/store';
-import { joinRoom, sendState, sendStateNow } from './realtime.js';
+import { joinRoom, sendState, sendStateNow, sendStats } from './realtime.js';
+import { stats } from './statsStore.js';
 
 const WS_URL = 'ws://localhost:5199';
 const BC_CHANNEL = 'scoreboard-sync';
@@ -469,6 +470,12 @@ function createScoreboardStore() {
       },
       // Host: a viewer just joined and needs a snapshot immediately.
       onStateRequest: () => sendStateNow(get({ subscribe })),
+
+      // Stats ride the same room but their own event. Wired here so both the
+      // Controller and the Overlay get them from one place, exactly as they do
+      // scoreboard state.
+      onStats: (wire) => stats.applyRemote(wire),
+      onStatsRequest: () => sendStats(stats.wire()),
     });
 
     // Host: re-send full state periodically so an overlay that missed the

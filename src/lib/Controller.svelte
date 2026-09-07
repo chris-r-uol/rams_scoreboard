@@ -1,6 +1,7 @@
 <script>
   import { onDestroy } from 'svelte';
   import { scoreboard, stopAllIntervals } from './store.js';
+  import { stats } from './statsStore.js';
   import { user, plan, sportAllowedOn } from './auth.js';
   import {
     leaveRoom, joinControlChannel, leaveControlChannel, sendControlState, sendCommand,
@@ -41,15 +42,19 @@
     // deciding when a clock hits zero, or each saving its own copy, is exactly
     // the divergence this design exists to avoid.
     scoreboard.setFollowerTransport((msg) => sendCommand(msg));
+    stats.setFollowerTransport((msg) => sendCommand(msg));
 
     joinControlChannel(followerToken, {
       role: 'remote',
       onState: (incoming, sentAt) => scoreboard.applyHostState(incoming, sentAt),
+      onStats: (wire) => stats.applyRemote(wire),
     });
   } else {
     // ── Host ──────────────────────────────────────────────
     // Drives the clocks and owns the saved copy of the game.
     scoreboard.becomeController();
+    stats.becomeController();
+    stats.restorePersisted();
 
     // Recover an in-progress game before going on air. Without this, a refresh
     // or crash mid-match resets to defaults and pushes those defaults out to
@@ -80,6 +85,11 @@
           if (ALLOWED.includes(msg.method)) {
             scoreboard[msg.method](...(Array.isArray(msg.args) ? msg.args : []));
           }
+        } else if (msg.kind === 'stats' && msg.stats) {
+          // A co-controller entering stats. Applied and re-broadcast so every
+          // device and the overlay converge on the host's copy.
+          stats.applyRemote(msg.stats);
+          stats.republish();
         } else if (msg.id && current.sport) {
           runCommand(current.sport, msg.id);
         }
