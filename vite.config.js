@@ -78,7 +78,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.test.js'],
+    include: ['src/**/*.test.{js,ts}'],
     setupFiles: ['./src/test-setup.js'],
     // Not localhost: the store only reaches for the dev relay socket when the
     // page is served locally, and a real connection attempt in tests is noise.
