@@ -22,6 +22,7 @@ function scoreboardRelayPlugin() {
     name: 'scoreboard-relay',
     configureServer(server) {
       let latestState = null
+      let latestStats = null
       const wss = new WebSocketServer({ port: WS_RELAY_PORT })
 
       wss.on('error', (err) => {
@@ -41,12 +42,19 @@ function scoreboardRelayPlugin() {
         if (latestState) {
           client.send(JSON.stringify({ type: 'state-update', state: latestState }))
         }
+        // Stats are cached and replayed for the same reason as state: an OBS
+        // source opened mid-game would otherwise show no stat panel until the
+        // next entry, which could be several minutes away.
+        if (latestStats) {
+          client.send(JSON.stringify({ type: 'stats-update', stats: latestStats }))
+        }
 
         client.on('message', (rawData) => {
           try {
             const msg = JSON.parse(rawData.toString())
-            if (msg.type === 'state-update') {
-              latestState = msg.state
+            if (msg.type === 'state-update' || msg.type === 'stats-update') {
+              if (msg.type === 'state-update') latestState = msg.state
+              else latestStats = msg.stats
               // Relay to every other connected client
               wss.clients.forEach((other) => {
                 if (other !== client && other.readyState === WebSocket.OPEN) {
@@ -78,7 +86,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.test.js'],
+    include: ['src/**/*.test.{js,ts}'],
     setupFiles: ['./src/test-setup.js'],
     // Not localhost: the store only reaches for the dev relay socket when the
     // page is served locally, and a real connection attempt in tests is noise.
