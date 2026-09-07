@@ -61,7 +61,11 @@
       {#if !hasData}
         <p class="gs-empty">Nothing recorded yet — totals and exports appear once plays are entered.</p>
       {:else}
-        <TeamTotals stats={game.teamStats} />
+        <TeamTotals
+          stats={game.teamStats}
+          currentDrive={game.currentDrive}
+          completedDrives={game.completedDrives}
+        />
 
         <div class="gs-export">
           <p class="gs-label">Export</p>

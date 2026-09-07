@@ -17,6 +17,10 @@ export interface ActionMeta {
 export const STAT_ACTIONS: ActionMeta[] = [
 	// Passing
 	{ action: 'pass_attempt_incomplete', label: 'Incomplete Pass', category: 'passing', requiresReceiver: false, requiresYards: false, tone: 'bg-gray-700 hover:bg-gray-600' },
+	// Ball security sits with the offence that lost it, so it is entered from
+	// whichever panel the operator is already on for that play.
+	{ action: 'fumble', label: 'Fumble (kept)', category: 'rushing', requiresReceiver: false, requiresYards: false, tone: 'bg-orange-700 hover:bg-orange-600' },
+	{ action: 'fumble_lost', label: 'Fumble LOST', category: 'rushing', requiresReceiver: false, requiresYards: false, tone: 'bg-red-700 hover:bg-red-600' },
 	{ action: 'pass_completion', label: 'Complete Pass', category: 'passing', requiresReceiver: true, requiresYards: true, tone: 'bg-blue-700 hover:bg-blue-600', role: 'primary' },
 	{ action: 'passing_td', label: 'Passing TD 🏈', category: 'passing', requiresReceiver: true, requiresYards: true, tone: 'bg-green-700 hover:bg-green-600', role: 'touchdown' },
 	{ action: 'interception_thrown', label: 'Interception', category: 'passing', requiresReceiver: false, requiresYards: false, tone: 'bg-red-700 hover:bg-red-600' },
@@ -25,16 +29,21 @@ export const STAT_ACTIONS: ActionMeta[] = [
 	{ action: 'rush_td', label: 'Rush TD 🏈', category: 'rushing', requiresReceiver: false, requiresYards: true, tone: 'bg-green-700 hover:bg-green-600', role: 'touchdown' },
 	// Defence
 	{ action: 'tackle', label: 'Tackle', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-gray-700 hover:bg-gray-600', role: 'primary' },
+	{ action: 'tackle_assist', label: 'Assist', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-gray-700 hover:bg-gray-600' },
 	{ action: 'tackle_for_loss', label: 'TFL', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: -1, tone: 'bg-orange-700 hover:bg-orange-600' },
 	{ action: 'sack', label: 'Sack', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: -7, tone: 'bg-red-700 hover:bg-red-600' },
-	{ action: 'interception', label: 'INT', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-purple-700 hover:bg-purple-600' },
+	{ action: 'interception', label: 'INT', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-purple-700 hover:bg-purple-600' },
+	{ action: 'pass_defended', label: 'PBU', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-blue-700 hover:bg-blue-600' },
+	{ action: 'fumble_recovery', label: 'Fumble Rec', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-yellow-700 hover:bg-yellow-600' },
 	{ action: 'forced_fumble', label: 'FF', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-yellow-700 hover:bg-yellow-600' },
 	// Defensive scores
 	{ action: 'interception_td', label: 'Pick Six 🏈', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600' },
 	{ action: 'fumble_return_td', label: 'Fumble Return TD 🏈', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600' },
 	{ action: 'safety', label: 'Safety', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-orange-700 hover:bg-orange-600' },
 	// Special teams. `yards` is the return distance where it is known.
-	{ action: 'kick_return_td', label: 'Kick Return TD 🏈', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600', role: 'primary' },
+	{ action: 'kick_return', label: 'Kick Return', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-gray-700 hover:bg-gray-600', role: 'primary' },
+	{ action: 'punt_return', label: 'Punt Return', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-gray-700 hover:bg-gray-600' },
+	{ action: 'kick_return_td', label: 'Kick Return TD 🏈', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600' },
 	{ action: 'punt_return_td', label: 'Punt Return TD 🏈', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600' },
 	{ action: 'blocked_kick_td', label: 'Blocked Kick TD 🏈', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-800 hover:bg-green-700' },
 	// Kicking. Distances go in `yards`; a 38-yard field goal is a 38, not a gain.
