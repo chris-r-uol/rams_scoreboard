@@ -90,6 +90,11 @@ function buildTeamSummaryRows(state: GameState): (string | number)[][] {
 		['Sack Yards', ts.defence.sackYards],
 		['Interceptions', ts.defence.interceptions],
 		['Forced Fumbles', ts.defence.forcedFumbles],
+		['Defensive Touchdowns', ts.defence.touchdowns],
+		['Safeties', ts.defence.safeties],
+		[],
+		['SPECIAL TEAMS'],
+		['Return Touchdowns', ts.specialTeams.touchdowns],
 		[],
 		['KICKING'],
 		['Field Goals', `${ts.kicking.fieldGoalsMade}/${ts.kicking.fieldGoalsAttempted}`],
@@ -113,10 +118,13 @@ function buildTeamSummaryRows(state: GameState): (string | number)[][] {
 		['Total Offensive Plays', ts.totalOffensivePlays],
 		[],
 		['POINTS FROM RECORDED PLAYS', ts.totalPoints],
-		['  Touchdowns', ts.totalTouchdowns * 6],
+		['  Offensive Touchdowns', (ts.passing.touchdowns + ts.rushing.touchdowns) * 6],
+		['  Defensive Touchdowns', ts.defence.touchdowns * 6],
+		['  Special Teams Touchdowns', ts.specialTeams.touchdowns * 6],
 		['  Field Goals', ts.kicking.fieldGoalsMade * 3],
 		['  Extra Points', ts.kicking.extraPointsMade],
-		['  Two-Point Conversions', ts.conversions.twoPointMade * 2]
+		['  Two-Point Conversions', ts.conversions.twoPointMade * 2],
+		['  Safeties', ts.defence.safeties * 2]
 	];
 }
 
@@ -126,7 +134,7 @@ function buildPlayerRows(state: GameState): (string | number)[][] {
 		'Pass Att', 'Pass Comp', 'Comp%', 'Pass Yds', 'Yds/Att', 'Pass TD', 'INT',
 		'Rush Att', 'Rush Yds', 'Yds/Car', 'Rush TD',
 		'Rec', 'Rec Yds', 'Yds/Rec', 'Rec TD',
-		'Tackles', 'TFL', 'Sacks', 'Sack Yds', 'Def INT', 'FF',
+		'Tackles', 'TFL', 'Sacks', 'Sack Yds', 'Def INT', 'FF', 'Def TD', 'Safeties', 'ST TD',
 		'FG Made', 'FG Att', 'FG Long', 'XP Made', 'XP Att', 'Punts', 'Punt Yds', '2PT',
 		'Off Pen', 'Off Pen Yds', 'Def Pen', 'Def Pen Yds'
 	];
@@ -162,6 +170,9 @@ function buildPlayerRows(state: GameState): (string | number)[][] {
 			ps.defence.sackYards,
 			ps.defence.interceptions,
 			ps.defence.forcedFumbles,
+			ps.defence.touchdowns,
+			ps.defence.safeties,
+			ps.specialTeams.touchdowns,
 			ps.kicking.fieldGoalsMade,
 			ps.kicking.fieldGoalsAttempted,
 			ps.kicking.longestFieldGoal,

@@ -29,6 +29,14 @@ export const STAT_ACTIONS: ActionMeta[] = [
 	{ action: 'sack', label: 'Sack', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: -7, tone: 'bg-red-700 hover:bg-red-600' },
 	{ action: 'interception', label: 'INT', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-purple-700 hover:bg-purple-600' },
 	{ action: 'forced_fumble', label: 'FF', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-yellow-700 hover:bg-yellow-600' },
+	// Defensive scores
+	{ action: 'interception_td', label: 'Pick Six 🏈', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600' },
+	{ action: 'fumble_return_td', label: 'Fumble Return TD 🏈', category: 'defence', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600' },
+	{ action: 'safety', label: 'Safety', category: 'defence', requiresReceiver: false, requiresYards: false, tone: 'bg-orange-700 hover:bg-orange-600' },
+	// Special teams. `yards` is the return distance where it is known.
+	{ action: 'kick_return_td', label: 'Kick Return TD 🏈', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600', role: 'primary' },
+	{ action: 'punt_return_td', label: 'Punt Return TD 🏈', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-700 hover:bg-green-600' },
+	{ action: 'blocked_kick_td', label: 'Blocked Kick TD 🏈', category: 'special_teams', requiresReceiver: false, requiresYards: true, defaultYards: 0, tone: 'bg-green-800 hover:bg-green-700' },
 	// Kicking. Distances go in `yards`; a 38-yard field goal is a 38, not a gain.
 	{ action: 'field_goal_made', label: 'FG Good 🏈', category: 'kicking', requiresReceiver: false, requiresYards: true, defaultYards: 30, tone: 'bg-green-700 hover:bg-green-600', role: 'primary' },
 	{ action: 'field_goal_missed', label: 'FG Missed', category: 'kicking', requiresReceiver: false, requiresYards: true, defaultYards: 30, tone: 'bg-gray-700 hover:bg-gray-600' },

@@ -107,6 +107,30 @@ export function calculateStats(
 				primary.penalties.defensiveYards += Math.abs(yards);
 				break;
 
+			// ── Defensive and special-teams scores ─────────────────────────────
+			// `yards` on these is a return distance, so none of them feed the
+			// offensive totals — the offence was not on the field.
+			case 'interception_td':
+				// A pick-six is an interception too, so it counts as both rather
+				// than making the operator enter the same play twice.
+				primary.defence.interceptions += 1;
+				primary.defence.touchdowns += 1;
+				break;
+
+			case 'fumble_return_td':
+				primary.defence.touchdowns += 1;
+				break;
+
+			case 'safety':
+				primary.defence.safeties += 1;
+				break;
+
+			case 'kick_return_td':
+			case 'punt_return_td':
+			case 'blocked_kick_td':
+				primary.specialTeams.touchdowns += 1;
+				break;
+
 			// ── Kicking ────────────────────────────────────────────────────────
 			// `yards` is the attempt distance, not a gain, so none of these feed
 			// the offensive yardage totals.
@@ -184,6 +208,10 @@ export function calculateStats(
 		teamStats.defence.sackYards += ps.defence.sackYards;
 		teamStats.defence.interceptions += ps.defence.interceptions;
 		teamStats.defence.forcedFumbles += ps.defence.forcedFumbles;
+		teamStats.defence.touchdowns += ps.defence.touchdowns;
+		teamStats.defence.safeties += ps.defence.safeties;
+
+		teamStats.specialTeams.touchdowns += ps.specialTeams.touchdowns;
 
 		teamStats.kicking.fieldGoalsMade += ps.kicking.fieldGoalsMade;
 		teamStats.kicking.fieldGoalsAttempted += ps.kicking.fieldGoalsAttempted;
@@ -206,8 +234,13 @@ export function calculateStats(
 	}
 
 	teamStats.totalOffensiveYards = teamStats.passing.yards + teamStats.rushing.yards;
+	// Every phase. The two totals either side of this stay offence-only — see
+	// TeamStats.totalTouchdowns for why they differ.
 	teamStats.totalTouchdowns =
-		teamStats.passing.touchdowns + teamStats.rushing.touchdowns;
+		teamStats.passing.touchdowns +
+		teamStats.rushing.touchdowns +
+		teamStats.defence.touchdowns +
+		teamStats.specialTeams.touchdowns;
 	teamStats.totalOffensivePlays = teamStats.passing.attempts + teamStats.rushing.attempts;
 
 	// What has actually been recorded adds up to. A defensive or return score
@@ -217,7 +250,8 @@ export function calculateStats(
 		teamStats.totalTouchdowns * 6 +
 		teamStats.kicking.fieldGoalsMade * 3 +
 		teamStats.kicking.extraPointsMade +
-		teamStats.conversions.twoPointMade * 2;
+		teamStats.conversions.twoPointMade * 2 +
+		teamStats.defence.safeties * 2;
 
 	return { playerStats, teamStats };
 }

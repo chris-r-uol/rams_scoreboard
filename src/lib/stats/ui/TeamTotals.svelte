@@ -52,6 +52,9 @@
 				<div class="flex justify-between"><span>Sack Yds</span><span class="font-mono font-semibold">{stats.defence.sackYards}</span></div>
 				<div class="flex justify-between"><span>INT</span><span class="font-mono font-semibold">{stats.defence.interceptions}</span></div>
 				<div class="flex justify-between"><span>FF</span><span class="font-mono font-semibold">{stats.defence.forcedFumbles}</span></div>
+				<div class="flex justify-between"><span>Def TDs</span><span class="font-mono font-semibold">{stats.defence.touchdowns}</span></div>
+				<div class="flex justify-between"><span>Safeties</span><span class="font-mono font-semibold">{stats.defence.safeties}</span></div>
+				<div class="flex justify-between"><span>ST TDs</span><span class="font-mono font-semibold">{stats.specialTeams.touchdowns}</span></div>
 			</div>
 		</div>
 

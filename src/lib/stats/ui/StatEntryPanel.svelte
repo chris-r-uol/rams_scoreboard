@@ -12,7 +12,7 @@
 		yards = $bindable(0),
 		onAction
 	}: {
-		category: Extract<StatCategory, 'passing' | 'rushing' | 'defence' | 'kicking'>;
+		category: Extract<StatCategory, 'passing' | 'rushing' | 'defence' | 'kicking' | 'special_teams'>;
 		roster: Player[];
 		primaryId: string;
 		secondaryId: string;
@@ -24,7 +24,8 @@
 		passing: { heading: 'Passing', tone: 'text-blue-400', primary: 'Passer' },
 		rushing: { heading: 'Rushing', tone: 'text-green-400', primary: 'Ball Carrier' },
 		defence: { heading: 'Defence', tone: 'text-red-400', primary: 'Defender' },
-		kicking: { heading: 'Kicking', tone: 'text-yellow-400', primary: 'Kicker' }
+		kicking: { heading: 'Kicking', tone: 'text-yellow-400', primary: 'Kicker' },
+		special_teams: { heading: 'Special Teams', tone: 'text-purple-400', primary: 'Returner' }
 	};
 
 	const meta = $derived(LABELS[category]);

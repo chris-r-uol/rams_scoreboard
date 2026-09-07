@@ -62,6 +62,19 @@ function pct(a: number, b: number): string {
 			</div>
 		</div>
 
+		<!-- Scores the offence had nothing to do with. Rare, so only ever shown
+		     when one has actually happened. -->
+		{#if ts.defence.touchdowns > 0 || ts.specialTeams.touchdowns > 0 || ts.defence.safeties > 0}
+		<div style="display:flex;align-items:baseline;gap:12px;">
+			<span style="width:44px;font-size:0.65rem;opacity:0.65;text-transform:uppercase;letter-spacing:0.1em;flex-shrink:0;">SCORE</span>
+			<div style="display:flex;gap:16px;font-size:0.82rem;font-weight:600;font-variant-numeric:tabular-nums;flex-wrap:wrap;">
+				{#if ts.defence.touchdowns > 0}<span>{ts.defence.touchdowns} DEF TD</span>{/if}
+				{#if ts.specialTeams.touchdowns > 0}<span>{ts.specialTeams.touchdowns} ST TD</span>{/if}
+				{#if ts.defence.safeties > 0}<span>{ts.defence.safeties} SAF</span>{/if}
+			</div>
+		</div>
+		{/if}
+
 		<!-- Kicking — only shown once someone has kicked -->
 		{#if ts.kicking.fieldGoalsAttempted > 0 || ts.kicking.extraPointsAttempted > 0 || ts.conversions.twoPointMade > 0}
 		<div style="display:flex;align-items:baseline;gap:12px;">
