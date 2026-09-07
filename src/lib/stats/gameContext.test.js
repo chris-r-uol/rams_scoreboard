@@ -12,7 +12,7 @@ vi.mock('../realtime.js', () => ({
   joinRoom: vi.fn(), sendState: vi.fn(), sendStateNow: vi.fn(),
 }));
 
-const { gameContextFrom, withGameContext } = await import('./gameContext.js');
+const { gameContextFrom, withGameContext, teamConfigFrom } = await import('./gameContext.js');
 
 describe('gameContextFrom', () => {
   it('stamps quarter and clock for football', () => {
@@ -63,5 +63,45 @@ describe('withGameContext', () => {
     );
     expect(event.quarter).toBe('Q1');
     expect(event.gameClock).toBe('15:00');
+  });
+});
+
+describe('teamConfigFrom', () => {
+  it('takes the team from the scoreboard rather than a second setup screen', () => {
+    // Standalone, stats had its own team name, colours and logo. Deriving them
+    // removes a duplicate settings screen and removes any way for the scorebug
+    // and a stats overlay to disagree about the home side.
+    const team = teamConfigFrom({
+      homeName: 'Leeds Rams',
+      homePrimary: '#123456',
+      homeSecondary: '#654321',
+      homeText: '#FFFFFF',
+      homeLogo: 'data:image/webp;base64,AAAA',
+    });
+
+    expect(team.name).toBe('Leeds Rams');
+    expect(team.primaryColour).toBe('#123456');
+    expect(team.secondaryColour).toBe('#654321');
+    expect(team.logoDataUrl).toBe('data:image/webp;base64,AAAA');
+  });
+
+  it('keeps an abbreviation the scoreboard has no field for', () => {
+    const team = teamConfigFrom({ homeName: 'Leeds Rams' }, { abbreviation: 'LDS' });
+    expect(team.abbreviation).toBe('LDS');
+    expect(team.name).toBe('Leeds Rams');
+  });
+
+  it('falls back to the name when no abbreviation has been set', () => {
+    expect(teamConfigFrom({ homeName: 'RAMS' }).abbreviation).toBe('RAMS');
+  });
+
+  it('produces something usable from empty state', () => {
+    const team = teamConfigFrom({});
+    expect(team.name).toBe('HOME');
+    expect(team.primaryColour).toBeTruthy();
+  });
+
+  it('leaves the logo undefined rather than empty, which the overlay checks', () => {
+    expect(teamConfigFrom({ homeName: 'X', homeLogo: '' }).logoDataUrl).toBeUndefined();
   });
 });

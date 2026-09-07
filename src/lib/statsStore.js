@@ -193,6 +193,20 @@ function createStatsStore() {
       });
     },
 
+    /**
+     * Put a deleted event back where it was.
+     *
+     * Restores by index rather than appending, because the log is read in
+     * order — an entry reinstated at the end would appear to have happened
+     * after plays that actually followed it.
+     */
+    restoreEvent(event, index) {
+      const current = get({ subscribe });
+      const events = [...current.events];
+      events.splice(Math.max(0, Math.min(index, events.length)), 0, event);
+      commit({ ...current, events });
+    },
+
     /** Take back the most recent entry. */
     undoLastEvent() {
       const current = get({ subscribe });

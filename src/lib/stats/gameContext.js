@@ -74,3 +74,30 @@ export function gameContextFrom(state) {
 export function withGameContext(event, state) {
   return { ...gameContextFrom(state), ...event };
 }
+
+/**
+ * The stats team config, taken from the scoreboard's home team.
+ *
+ * Standalone, the stats project had its own team setup screen — name, colours,
+ * logo — because nothing else knew them. The scoreboard already owns all of it,
+ * so deriving here removes a whole duplicate settings screen and, more
+ * importantly, removes the chance of the scorebug and the stats overlay
+ * disagreeing about what the home side is called or what colour it is.
+ *
+ * `abbreviation` has no scoreboard equivalent, so it falls back to the name,
+ * which is already short: the scorebug caps it at 12 characters.
+ *
+ * @param {object} state scoreboard state
+ * @param {object} [existing] current stats team, for fields the scoreboard lacks
+ */
+export function teamConfigFrom(state, existing = {}) {
+  return {
+    ...existing,
+    name: state?.homeName ?? existing.name ?? 'HOME',
+    abbreviation: existing.abbreviation || state?.homeName || 'HOME',
+    primaryColour: state?.homePrimary ?? existing.primaryColour ?? '#002244',
+    secondaryColour: state?.homeSecondary ?? existing.secondaryColour ?? '#869397',
+    textColor: state?.homeText ?? existing.textColor ?? '#FFFFFF',
+    logoDataUrl: state?.homeLogo || existing.logoDataUrl || undefined,
+  };
+}

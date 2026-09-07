@@ -231,3 +231,46 @@ describe('who owns the stats', () => {
     expect(s.team.name).toBe('Leeds Rams');
   });
 });
+
+describe('restoring a deleted entry', () => {
+  it('puts it back where it was, not at the end', async () => {
+    // The log is read in order, so an entry reinstated at the end would appear
+    // to have happened after plays that actually followed it.
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.addEvent(rush('e1', 7));
+    stats.addEvent(rush('e2', 3));
+    stats.addEvent(rush('e3', 5));
+
+    const removed = get(stats).events[1];
+    stats.removeEvent('e2');
+    stats.restoreEvent(removed, 1);
+
+    expect(get(stats).events.map((e) => e.id)).toEqual(['e1', 'e2', 'e3']);
+  });
+
+  it('clamps an out-of-range index rather than losing the entry', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.addEvent(rush('e1', 7));
+
+    stats.restoreEvent(rush('e9', 1), 99);
+
+    expect(get(stats).events.map((e) => e.id)).toEqual(['e1', 'e9']);
+  });
+
+  it('re-derives the totals after restoring', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.addEvent(rush('e1', 7));
+    const removed = get(stats).events[0];
+    stats.removeEvent('e1');
+    expect(get(stats).playerStats.p1?.rushing.yards ?? 0).toBe(0);
+
+    stats.restoreEvent(removed, 0);
+    expect(get(stats).playerStats.p1.rushing.yards).toBe(7);
+  });
+});
