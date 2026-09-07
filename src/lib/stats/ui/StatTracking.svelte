@@ -19,6 +19,7 @@
   import { getActionMeta } from '../eventTypes.ts';
   import StatEntryPanel from './StatEntryPanel.svelte';
   import RecentEvents from './RecentEvents.svelte';
+  import OverlayControls from './OverlayControls.svelte';
 
   let open = $state(false);
   let category = $state('rushing');
@@ -190,6 +191,10 @@
           onAction={record}
         />
 
+        <div class="st-divider"></div>
+        <OverlayControls />
+        <div class="st-divider"></div>
+
         {#if lastDeleted}
           <div class="st-undo">
             <span>Entry deleted.</span>
@@ -215,6 +220,8 @@
   .st-empty { background: var(--c-bg-input); border: 1px solid var(--c-bd-input); border-radius: 12px; padding: 16px 18px; }
   .st-empty-title { margin: 0 0 6px; font-size: 14px; font-weight: 700; color: var(--c-text); }
   .st-empty-note { margin: 0; font-size: 13px; line-height: 1.6; color: var(--c-text-mute); }
+
+  .st-divider { height: 1px; background: var(--c-bd-card); }
 
   .st-roster-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--c-text-sub); }
 

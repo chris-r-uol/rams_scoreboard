@@ -159,6 +159,12 @@ const DEFAULT_STATE = {
   overlayPosition: 'bottom-center',
   overlayScale: 1,
 
+  // Stat panels get their own anchor. They are large cards rather than a strip
+  // beside the bug, so tying them to the scorebug's corner would either cover
+  // the bug or drag it around the canvas whenever a panel came up.
+  statsOverlayPosition: 'bottom-left',
+  statsOverlayScale: 1,
+
   // Sponsor panel. Which one is showing, and whether it is showing at all, are
   // derived locally from these on every client — see sponsors.js — so a
   // rotating sponsor costs no messages at all.
@@ -401,6 +407,7 @@ function createScoreboardStore() {
       try {
         const msg = event.data;
         if (msg?.type === 'state-update') applyIncoming(msg.state, msg.sentAt);
+        else if (msg?.type === 'stats-update' && !stats.isOwner()) stats.applyRemote(msg.stats);
       } catch (_) {}
     });
   } catch (_) {
@@ -429,6 +436,11 @@ function createScoreboardStore() {
         if (msg.type === 'state-update') {
           applyIncoming(msg.state, msg.sentAt);
           bc?.postMessage(msg);
+        } else if (msg.type === 'stats-update' && !stats.isOwner()) {
+          // Not mirrored onto the BroadcastChannel: every tab holds its own
+          // relay socket, so the relay has already reached them, and bouncing
+          // it back would only widen the window for a replayed copy to travel.
+          stats.applyRemote(msg.stats);
         }
       } catch (_) {}
     });
@@ -474,7 +486,10 @@ function createScoreboardStore() {
       // Stats ride the same room but their own event. Wired here so both the
       // Controller and the Overlay get them from one place, exactly as they do
       // scoreboard state.
-      onStats: (wire) => stats.applyRemote(wire),
+      onStats: (wire) => {
+        if (stats.isOwner()) return;
+        stats.applyRemote(wire);
+      },
       onStatsRequest: () => sendStats(stats.wire()),
     });
 
@@ -507,6 +522,28 @@ function createScoreboardStore() {
     sendState(state);
     persist(state);
   }
+
+  /**
+   * Put the stats log on the local transports.
+   *
+   * Registered with the stats store rather than called by it: this module
+   * already imports that one, so the dependency has to run this way round.
+   *
+   * Without this, a locally-run setup — app and OBS on the same machine, no
+   * account needed — would sync the scorebug over the relay and silently show
+   * no stat panels at all, because stats only ever went out over Supabase.
+   */
+  stats.setLocalTransport((wire) => {
+    const msg = { type: 'stats-update', stats: wire };
+    try {
+      bc?.postMessage(msg);
+    } catch (err) {
+      console.error('[store] BroadcastChannel stats post failed:', err);
+    }
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  });
 
   // ── Persistence ─────────────────────────────────────────
   // Only the Controller persists. An overlay writing its own copy would let a

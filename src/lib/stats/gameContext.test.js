@@ -80,8 +80,8 @@ describe('teamConfigFrom', () => {
     });
 
     expect(team.name).toBe('Leeds Rams');
-    expect(team.primaryColour).toBe('#123456');
-    expect(team.secondaryColour).toBe('#654321');
+    expect(team.primaryColor).toBe('#123456');
+    expect(team.secondaryColor).toBe('#654321');
     expect(team.logoDataUrl).toBe('data:image/webp;base64,AAAA');
   });
 
@@ -98,7 +98,7 @@ describe('teamConfigFrom', () => {
   it('produces something usable from empty state', () => {
     const team = teamConfigFrom({});
     expect(team.name).toBe('HOME');
-    expect(team.primaryColour).toBeTruthy();
+    expect(team.primaryColor).toBeTruthy();
   });
 
   it('leaves the logo undefined rather than empty, which the overlay checks', () => {

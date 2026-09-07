@@ -31,7 +31,7 @@ import { writable, get } from 'svelte/store';
 import { sendStats } from './realtime.js';
 import { calculateStats } from './stats/calculateStats.ts';
 import { recalculateDrives } from './stats/drives.ts';
-import { reconcileMilestones } from './stats/alertDetection.ts';
+import { reconcileMilestones, detectAlerts } from './stats/alertDetection.ts';
 import { emptyTeamStats } from './stats/emptyStats.ts';
 
 const PERSIST_KEY = 'scoreboard-stats-v1';
@@ -48,8 +48,8 @@ export function createEmptyStats() {
     team: {
       name: 'HOME',
       abbreviation: 'HOME',
-      primaryColour: '#002244',
-      secondaryColour: '#869397',
+      primaryColor: '#002244',
+      secondaryColor: '#869397',
       textColor: '#FFFFFF',
     },
     roster: [],
@@ -112,6 +112,9 @@ function createStatsStore() {
 
   let isController = false;
   let forwardToHost = null;
+  // Set by the scoreboard store: BroadcastChannel and the local dev relay, so
+  // an overlay on the same machine gets stats without an account.
+  let localSend = null;
 
   function persist(state) {
     if (!isController) return;
@@ -134,9 +137,11 @@ function createStatsStore() {
       return;
     }
 
+    const wire = toWire(derived);
     set(derived);
     persist(derived);
-    sendStats(toWire(derived));
+    localSend?.(wire);
+    sendStats(wire);
   }
 
   return {
@@ -152,10 +157,29 @@ function createStatsStore() {
       forwardToHost = send;
     },
 
+    /** Also publish on the same-machine transports. See store.js. */
+    setLocalTransport(send) {
+      localSend = send;
+    },
+
     /** Apply state from the host or another device. Never echoed back. */
     applyRemote(wire) {
       if (!wire) return;
       set(fromWire(wire));
+    },
+
+    /**
+     * Whether this client owns the stats.
+     *
+     * Asked by the local transports before applying anything: the relay caches
+     * the last stats it saw and replays them to whoever connects next, so an
+     * overlay reloading mid-game can put an old copy back on the wire. The
+     * owner adopting that would roll its own game backwards. Same rule as the
+     * clock: the controller is the source, and never takes correction from a
+     * client that is only repeating what it was told.
+     */
+    isOwner() {
+      return isController;
     },
 
     /** The wire form, for answering a request for a snapshot. */
@@ -171,18 +195,62 @@ function createStatsStore() {
      */
     republish() {
       if (forwardToHost) return;
-      sendStats(toWire(get({ subscribe })));
+      const wire = toWire(get({ subscribe }));
+      localSend?.(wire);
+      sendStats(wire);
     },
 
     // ── Mutations ─────────────────────────────────────────
+    /**
+     * Record a play, and raise any alert it earns.
+     *
+     * Alerts are detected here rather than in `derive` because they are events,
+     * not a function of the log: a 40-yard run is a big play the moment it is
+     * entered, and re-deriving the whole log must not put that card back on air
+     * an hour later. The queue itself travels on the wire, so the overlay shows
+     * exactly what the operator's device decided to show.
+     */
     addEvent(event) {
       const current = get({ subscribe });
-      commit({ ...current, events: [...current.events, event] });
+      const events = [...current.events, event];
+      const { playerStats } = calculateStats(current.roster ?? [], events);
+
+      // Queue behind anything still on air, so two big plays in a row are shown
+      // in turn instead of the second replacing the first mid-display.
+      const liveQueue = (current.alertQueue ?? []).filter((a) => a.expiresAt > Date.now());
+      const queueTailExpiry = liveQueue.reduce((max, a) => Math.max(max, a.expiresAt), 0);
+
+      const { alerts, newMilestoneKeys } = detectAlerts(
+        event,
+        playerStats,
+        current.playerStats ?? {},
+        current.firedMilestones ?? [],
+        current.roster ?? [],
+        queueTailExpiry,
+      );
+
+      commit({
+        ...current,
+        events,
+        alertQueue: [...liveQueue, ...alerts],
+        firedMilestones: [...(current.firedMilestones ?? []), ...newMilestoneKeys],
+      });
     },
 
+    /**
+     * Remove an event and retract what it caused.
+     *
+     * The alert goes with it: a mis-keyed touchdown that is deleted two seconds
+     * later should not keep celebrating on air. Milestones need no special
+     * handling — `derive` re-reconciles them against the recomputed stats.
+     */
     removeEvent(eventId) {
       const current = get({ subscribe });
-      commit({ ...current, events: current.events.filter((e) => e.id !== eventId) });
+      commit({
+        ...current,
+        events: current.events.filter((e) => e.id !== eventId),
+        alertQueue: (current.alertQueue ?? []).filter((a) => a.sourceEventId !== eventId),
+      });
     },
 
     updateEvent(eventId, changes) {
@@ -207,12 +275,27 @@ function createStatsStore() {
       commit({ ...current, events });
     },
 
-    /** Take back the most recent entry. */
+    /** Take back the most recent entry, and any alert it raised. */
     undoLastEvent() {
       const current = get({ subscribe });
       if (current.events.length === 0) return false;
-      commit({ ...current, events: current.events.slice(0, -1) });
+      const last = current.events[current.events.length - 1];
+      commit({
+        ...current,
+        events: current.events.slice(0, -1),
+        alertQueue: (current.alertQueue ?? []).filter((a) => a.sourceEventId !== last.id),
+      });
       return true;
+    },
+
+    /** Pull whatever is on air now, without touching the log behind it. */
+    clearActiveAlert() {
+      const current = get({ subscribe });
+      commit({ ...current, alertQueue: [] });
+    },
+
+    setOverlayMode(mode) {
+      commit({ ...get({ subscribe }), overlayMode: mode });
     },
 
     setRoster(roster) {
@@ -250,8 +333,10 @@ function createStatsStore() {
         if (!Array.isArray(stats.events) || stats.events.length === 0) return false;
 
         const restored = fromWire(stats);
+        const wire = toWire(restored);
         set(restored);
-        sendStats(toWire(restored));
+        localSend?.(wire);
+        sendStats(wire);
         return true;
       } catch (_) {
         return false;

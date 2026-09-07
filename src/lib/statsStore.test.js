@@ -274,3 +274,126 @@ describe('restoring a deleted entry', () => {
     expect(get(stats).playerStats.p1.rushing.yards).toBe(7);
   });
 });
+
+describe('alerts', () => {
+  it('raises a big-play alert on a long run and carries it on the wire', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.addEvent(rush('e1', 42));
+
+    const state = get(stats);
+    expect(state.alertQueue).toHaveLength(1);
+    expect(state.alertQueue[0].type).toBe('big_play');
+    expect(state.alertQueue[0].sourceEventId).toBe('e1');
+
+    // Alerts are not derived, so they must survive the trip to the overlay —
+    // otherwise the card fires on the controller and never goes on air.
+    expect(stats.wire().alertQueue).toHaveLength(1);
+  });
+
+  it('leaves an ordinary play alone', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.addEvent(rush('e1', 3));
+
+    expect(get(stats).alertQueue).toHaveLength(0);
+  });
+
+  it('queues a second big play behind the first rather than replacing it', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.addEvent(rush('e1', 42));
+    const first = get(stats).alertQueue[0];
+
+    stats.addEvent(rush('e2', 38));
+    const queue = get(stats).alertQueue;
+
+    expect(queue).toHaveLength(2);
+    expect(queue[1].expiresAt).toBeGreaterThan(first.expiresAt);
+  });
+
+  it('retracts the alert when its event is deleted', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.addEvent(rush('e1', 42));
+    stats.addEvent(rush('e2', 55));
+    stats.removeEvent('e1');
+
+    const ids = get(stats).alertQueue.map((a) => a.sourceEventId);
+    expect(ids).toEqual(['e2']);
+  });
+
+  it('retracts the alert when the entry is undone', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.addEvent(rush('e1', 42));
+    stats.undoLastEvent();
+
+    expect(get(stats).alertQueue).toHaveLength(0);
+    expect(get(stats).events).toHaveLength(0);
+  });
+
+  it('clears what is on air without touching the log', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+
+    stats.addEvent(rush('e1', 42));
+    stats.clearActiveAlert();
+
+    expect(get(stats).alertQueue).toHaveLength(0);
+    expect(get(stats).events).toHaveLength(1);
+    // The play still counts — only the celebration was pulled.
+    expect(get(stats).playerStats.p1.rushing.yards).toBe(42);
+  });
+
+  it('does not re-raise old alerts when the log is replayed', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+    stats.setRoster(ROSTER);
+    stats.addEvent(rush('e1', 42));
+    stats.clearActiveAlert();
+
+    // Any change re-derives the whole log. If alerts were derived rather than
+    // detected at entry, this would put an hour-old touchdown back on air.
+    stats.addEvent(rush('e2', 2));
+
+    expect(get(stats).alertQueue).toHaveLength(0);
+  });
+});
+
+describe('overlay mode', () => {
+  it('travels on the wire so the overlay knows what to show', async () => {
+    const { stats } = await freshStats();
+    stats.becomeController();
+
+    stats.setOverlayMode('leaderboard');
+
+    expect(get(stats).overlayMode).toBe('leaderboard');
+    expect(stats.wire().overlayMode).toBe('leaderboard');
+  });
+});
+
+describe('ownership', () => {
+  it('reports the owner, so echoed copies can be refused', async () => {
+    const { stats } = await freshStats();
+    expect(stats.isOwner()).toBe(false);
+
+    stats.becomeController();
+
+    // The local relay replays the last stats it saw to whoever connects next.
+    // Without this flag the host would adopt its own game back from a client
+    // repeating an old copy, undoing entries made since.
+    expect(stats.isOwner()).toBe(true);
+  });
+});

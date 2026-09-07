@@ -95,8 +95,8 @@ export function teamConfigFrom(state, existing = {}) {
     ...existing,
     name: state?.homeName ?? existing.name ?? 'HOME',
     abbreviation: existing.abbreviation || state?.homeName || 'HOME',
-    primaryColour: state?.homePrimary ?? existing.primaryColour ?? '#002244',
-    secondaryColour: state?.homeSecondary ?? existing.secondaryColour ?? '#869397',
+    primaryColor: state?.homePrimary ?? existing.primaryColor ?? '#002244',
+    secondaryColor: state?.homeSecondary ?? existing.secondaryColor ?? '#869397',
     textColor: state?.homeText ?? existing.textColor ?? '#FFFFFF',
     logoDataUrl: state?.homeLogo || existing.logoDataUrl || undefined,
   };

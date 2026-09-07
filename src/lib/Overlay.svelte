@@ -7,6 +7,7 @@
 <script>
   import { onDestroy } from 'svelte';
   import { scoreboard } from './store.js';
+  import { stats } from './statsStore.js';
   import { getRoomFromUrl } from './room.js';
   import { leaveRoom } from './realtime.js';
   import { overlayAnchorStyle, DEFAULT_OVERLAY_POSITION, DEFAULT_OVERLAY_SCALE } from './overlayLayout.js';
@@ -18,9 +19,20 @@
   import BaseballOverlay from './sports/BaseballOverlay.svelte';
   import CricketOverlay from './sports/CricketOverlay.svelte';
   import MtgOverlay from './sports/MtgOverlay.svelte';
+  import StatsPanelOverlay from './stats/ui/StatsOverlay.svelte';
+  import FeaturedPlayerOverlay from './stats/ui/FeaturedPlayerOverlay.svelte';
+  import LeaderboardOverlay from './stats/ui/LeaderboardOverlay.svelte';
+  import Last5PlaysOverlay from './stats/ui/Last5PlaysOverlay.svelte';
+  import RunPassChartOverlay from './stats/ui/RunPassChartOverlay.svelte';
+  import DriveSummaryOverlay from './stats/ui/DriveSummaryOverlay.svelte';
+  import AlertOverlay from './stats/ui/AlertOverlay.svelte';
 
   let state = $state({});
   scoreboard.subscribe((s) => { state = s; });
+
+  // Stats arrive on their own Realtime event, wired up by connectRealtime.
+  let game = $state(stats.get());
+  stats.subscribe((s) => { game = s; });
 
   // Connect to the Controller's room. Without a room id the overlay can only
   // receive BroadcastChannel messages, which never cross into OBS.
@@ -61,6 +73,27 @@
       state.overlayScale ?? DEFAULT_OVERLAY_SCALE,
     ),
   );
+
+  // ── Stat panels ──────────────────────────────────────────
+  // Football only: every category the stat engine knows is American football.
+  // Anchored separately from the scorebug — see statsOverlayPosition.
+  const statsAnchorStyle = $derived(
+    overlayAnchorStyle(
+      state.statsOverlayPosition ?? 'bottom-left',
+      state.statsOverlayScale ?? DEFAULT_OVERLAY_SCALE,
+    ),
+  );
+
+  const statsOn = $derived(state.sport === 'american-football');
+
+  // An alert pre-empts whatever panel is up: it is a ten-second interruption
+  // for a milestone or a big play, and two cards stacked in the same corner is
+  // worse than briefly losing the panel underneath.
+  const activeAlert = $derived(
+    statsOn ? (game.alertQueue ?? []).find((a) => a.expiresAt > now) ?? null : null,
+  );
+
+  const statsMode = $derived(activeAlert ? 'alert' : (statsOn ? game.overlayMode ?? 'hidden' : 'hidden'));
 </script>
 
 {#if !room}
@@ -104,6 +137,26 @@
 
 </div>
 
+{#if statsMode !== 'hidden'}
+  <div class="stats-stage" style={statsAnchorStyle}>
+    {#if activeAlert}
+      <AlertOverlay alert={activeAlert} team={game.team} {now} />
+    {:else if statsMode === 'team_stats'}
+      <StatsPanelOverlay state={game} />
+    {:else if statsMode === 'featured_player'}
+      <FeaturedPlayerOverlay state={game} />
+    {:else if statsMode === 'leaderboard'}
+      <LeaderboardOverlay state={game} />
+    {:else if statsMode === 'last_5_plays'}
+      <Last5PlaysOverlay state={game} />
+    {:else if statsMode === 'run_pass_chart'}
+      <RunPassChartOverlay state={game} />
+    {:else if statsMode === 'drive_summary'}
+      <DriveSummaryOverlay state={game} />
+    {/if}
+  </div>
+{/if}
+
 <!--
   Free-tier watermark. Deliberately small and low-contrast: it should be a
   visible reason to upgrade without making the free tier unusable on a real
@@ -138,6 +191,17 @@
   .stage[data-placement="left"]  { flex-direction: row-reverse; }
 
   .bug { display: flex; }
+
+  /* Same anchor mechanism as .stage, its own position and scale. Not a flex
+     row: only ever one panel is up at a time. */
+  .stats-stage {
+    position: fixed;
+    inset: var(--sb-inset, auto auto 48px 48px);
+    transform: var(--sb-translate, translate(0)) scale(var(--sb-scale, 1));
+    transform-origin: var(--sb-origin, bottom left);
+    pointer-events: none;
+    z-index: 9998;
+  }
 
   .sponsor {
     display: block;
