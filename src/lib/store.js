@@ -159,11 +159,13 @@ const DEFAULT_STATE = {
   overlayPosition: 'bottom-center',
   overlayScale: 1,
 
-  // Stat panels get their own anchor. They are large cards rather than a strip
-  // beside the bug, so tying them to the scorebug's corner would either cover
-  // the bug or drag it around the canvas whenever a panel came up.
-  statsOverlayPosition: 'bottom-left',
-  statsOverlayScale: 1,
+  // Where a stat panel sits relative to the scorebug: above it or below it.
+  //
+  // Not a free position of its own. Broadcast graphics live in a band along the
+  // top or bottom of frame, and a panel given its own anchor could be placed
+  // straight over the score — which is the one thing that has to stay readable
+  // the whole time. Stacking them makes overlap impossible by construction.
+  statsPlacement: 'above',
 
   // Sponsor panel. Which one is showing, and whether it is showing at all, are
   // derived locally from these on every client — see sponsors.js — so a

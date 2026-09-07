@@ -30,16 +30,28 @@ const EDGE = '48px';
  * which made the lost scale easy to miss.
  */
 const POSITIONS = {
-  'top-left':      { inset: `${EDGE} auto auto ${EDGE}`, translate: 'translate(0)',             origin: 'top left' },
-  'top-center':    { inset: `${EDGE} auto auto 50%`,     translate: 'translateX(-50%)',         origin: 'top center' },
-  'top-right':     { inset: `${EDGE} ${EDGE} auto auto`, translate: 'translate(0)',             origin: 'top right' },
-  'middle-left':   { inset: `50% auto auto ${EDGE}`,     translate: 'translateY(-50%)',         origin: 'center left' },
-  'center':        { inset: '50% auto auto 50%',         translate: 'translate(-50%, -50%)',    origin: 'center' },
-  'middle-right':  { inset: `50% ${EDGE} auto auto`,     translate: 'translateY(-50%)',         origin: 'center right' },
-  'bottom-left':   { inset: `auto auto ${EDGE} ${EDGE}`, translate: 'translate(0)',             origin: 'bottom left' },
-  'bottom-center': { inset: `auto auto ${EDGE} 50%`,     translate: 'translateX(-50%)',         origin: 'bottom center' },
-  'bottom-right':  { inset: `auto ${EDGE} ${EDGE} auto`, translate: 'translate(0)',             origin: 'bottom right' },
+  'top-left':      { inset: `${EDGE} auto auto ${EDGE}`, translate: 'translate(0)',             origin: 'top left',     align: 'flex-start' },
+  'top-center':    { inset: `${EDGE} auto auto 50%`,     translate: 'translateX(-50%)',         origin: 'top center',   align: 'center' },
+  'top-right':     { inset: `${EDGE} ${EDGE} auto auto`, translate: 'translate(0)',             origin: 'top right',    align: 'flex-end' },
+  'middle-left':   { inset: `50% auto auto ${EDGE}`,     translate: 'translateY(-50%)',         origin: 'center left',  align: 'flex-start' },
+  'center':        { inset: '50% auto auto 50%',         translate: 'translate(-50%, -50%)',    origin: 'center',       align: 'center' },
+  'middle-right':  { inset: `50% ${EDGE} auto auto`,     translate: 'translateY(-50%)',         origin: 'center right', align: 'flex-end' },
+  'bottom-left':   { inset: `auto auto ${EDGE} ${EDGE}`, translate: 'translate(0)',             origin: 'bottom left',  align: 'flex-start' },
+  'bottom-center': { inset: `auto auto ${EDGE} 50%`,     translate: 'translateX(-50%)',         origin: 'bottom center', align: 'center' },
+  'bottom-right':  { inset: `auto ${EDGE} ${EDGE} auto`, translate: 'translate(0)',             origin: 'bottom right', align: 'flex-end' },
 };
+
+/**
+ * Where a stat panel sits relative to the scorebug.
+ *
+ * Only two, and deliberately so. A broadcast graphic lives in a band along the
+ * top or the bottom of frame, and a stat panel belongs in the same band as the
+ * scorebug it relates to — stacked with it, not floated somewhere else on the
+ * canvas. Giving the panel its own free anchor let the two be placed on top of
+ * each other, and the score is the one thing that must never be covered.
+ */
+export const STATS_PLACEMENTS = ['above', 'below'];
+export const DEFAULT_STATS_PLACEMENT = 'above';
 
 export const OVERLAY_POSITIONS = Object.keys(POSITIONS);
 
@@ -57,6 +69,10 @@ export function positionLabel(position) {
 /**
  * Build the inline style that drives an overlay's anchor.
  *
+ * `--sb-align` lines the stack up with the edge it is anchored to: a bug in the
+ * top-left corner with a panel above it should share a left edge, not be
+ * centred on each other.
+ *
  * @param {OverlayPosition} position
  * @param {number} scale
  * @returns {string} a style attribute value
@@ -64,7 +80,7 @@ export function positionLabel(position) {
 export function overlayAnchorStyle(position, scale) {
   const p = POSITIONS[position] ?? POSITIONS[DEFAULT_OVERLAY_POSITION];
   const s = clampScale(scale);
-  return `--sb-inset: ${p.inset}; --sb-translate: ${p.translate}; --sb-origin: ${p.origin}; --sb-scale: ${s};`;
+  return `--sb-inset: ${p.inset}; --sb-translate: ${p.translate}; --sb-origin: ${p.origin}; --sb-align: ${p.align}; --sb-scale: ${s};`;
 }
 
 /** Keep scale inside a range that stays legible and on-canvas. */

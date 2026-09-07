@@ -6,18 +6,19 @@
    * on air, and a set of independent switches would invite the operator to turn
    * two on and wonder why only one appeared.
    *
-   * Position and scale live in scoreboard state alongside the scorebug's own
-   * anchor, because that is what the overlay reads and it is a display setting
-   * rather than part of the match record. Panels get their own anchor: a
-   * leaderboard is a 380px card, not a strip beside the bug.
+   * A panel is placed above or below the score pack, not anywhere on the canvas.
+   * Broadcast graphics sit in a band along the top or bottom of frame, and a
+   * stat panel belongs in the same band as the score it relates to. It also
+   * makes the important guarantee structural rather than a matter of care: the
+   * two are stacked, so a panel can never cover the score.
+   *
+   * Where that band is, and how big it is, stays with the scorebug's own
+   * position and scale — one control for the whole graphics package.
    */
   import { onDestroy } from 'svelte';
   import { scoreboard } from '../../store.js';
   import { stats } from '../../statsStore.js';
-  import {
-    OVERLAY_POSITIONS, positionLabel, clampScale,
-    SCALE_MIN, SCALE_MAX,
-  } from '../../overlayLayout.js';
+  import { DEFAULT_STATS_PLACEMENT } from '../../overlayLayout.js';
 
   let game = $state(stats.get());
   let board = $state({});
@@ -48,8 +49,7 @@
 
   const mode = $derived(game.overlayMode ?? 'hidden');
   const featuredId = $derived(game.selectedOverlayPlayers?.[0] ?? '');
-  const position = $derived(board.statsOverlayPosition ?? 'bottom-left');
-  const scale = $derived(board.statsOverlayScale ?? 1);
+  const placement = $derived(board.statsPlacement ?? DEFAULT_STATS_PLACEMENT);
 
   // Alerts pre-empt whatever panel is up, so the operator needs a way to pull
   // one that fired on a mis-keyed play without deleting the play itself.
@@ -122,24 +122,21 @@
   {/if}
 
   {#if mode !== 'hidden'}
-    <div class="oc-place">
-      <label class="oc-field">
-        <span>Position</span>
-        <select
-          value={position}
-          onchange={(e) => scoreboard.patch({ statsOverlayPosition: e.currentTarget.value })}
-        >
-          {#each OVERLAY_POSITIONS as p}<option value={p}>{positionLabel(p)}</option>{/each}
-        </select>
-      </label>
-
-      <label class="oc-field">
-        <span>Size {Math.round(scale * 100)}%</span>
-        <input
-          type="range" min={SCALE_MIN} max={SCALE_MAX} step="0.05" value={scale}
-          oninput={(e) => scoreboard.patch({ statsOverlayScale: clampScale(e.currentTarget.value) })}
-        />
-      </label>
+    <div class="oc-field">
+      <span>Panel sits</span>
+      <div class="oc-modes">
+        {#each [{ id: 'above', label: 'Above the score' }, { id: 'below', label: 'Below the score' }] as p}
+          <button
+            class="oc-mode"
+            class:oc-mode-on={placement === p.id}
+            onclick={() => scoreboard.patch({ statsPlacement: p.id })}
+          >{p.label}</button>
+        {/each}
+      </div>
+      <p class="oc-hint">
+        Moves and scales with the score pack, under Overlay size and position. The score
+        is never covered.
+      </p>
     </div>
   {/if}
 </div>
@@ -171,8 +168,7 @@
      "something is on air". */
   .oc-mode-off { background: var(--c-bg-btn); border-color: var(--c-bd-btn); color: var(--c-text-btn); }
 
-  .oc-place { display: flex; gap: 12px; flex-wrap: wrap; }
-  .oc-place .oc-field { flex: 1 1 160px; }
+  .oc-hint { margin: 2px 0 0; font-size: 12px; line-height: 1.55; color: var(--c-text-mute); }
 
   .oc-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--c-text-mute); }
   .oc-field select {
@@ -180,7 +176,5 @@
     background: var(--c-bg-input); border: 1px solid var(--c-bd-input);
     color: var(--c-text-val); font-size: 13px; font-weight: 600;
   }
-  .oc-field input[type='range'] { accent-color: #2563eb; }
-
   .oc-note { margin: 0; font-size: 12.5px; color: #fcd34d; }
 </style>
