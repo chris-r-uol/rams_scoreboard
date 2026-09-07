@@ -73,6 +73,17 @@ export const FREE_SPORT = 'ice-hockey';
 export const subscriptionResolved = writable(false);
 
 /**
+ * True while the user has arrived from a password-reset link and has not yet
+ * set a new password.
+ *
+ * Driven by Supabase's PASSWORD_RECOVERY event rather than by a route: the
+ * recovery link returns with its tokens in the URL fragment, and this app uses
+ * hash routing, so the two would be fighting over the same fragment. Watching
+ * the event sidesteps that entirely.
+ */
+export const passwordRecovery = writable(false);
+
+/**
  * 'pro' | 'free' | null, where null means "not known yet".
  *
  * Callers must treat null as "wait" rather than "free". Getting this wrong is
@@ -112,6 +123,15 @@ function devPlan() {
 
 function applyLocalAuthBypass() {
   const mode = devPlan();
+
+  // The password-reset screen is otherwise only reachable by triggering a real
+  // reset email, which makes it tedious to work on. Same idea as `dev-plan`:
+  //   localStorage.setItem('dev-recovery', '1')
+  try {
+    if (localStorage.getItem('dev-recovery')) passwordRecovery.set(true);
+  } catch (_) {
+    // Storage blocked — nothing to simulate.
+  }
 
   if (mode === 'signed-out') {
     session.set(null);
@@ -169,6 +189,11 @@ async function init() {
   supabase.auth.onAuthStateChange(async (event, newSession) => {
     session.set(newSession);
 
+    // Arrived from a reset link. The session this creates is real, so without
+    // this flag the user would land straight in the controller and never be
+    // asked for the new password they came to set.
+    if (event === 'PASSWORD_RECOVERY') passwordRecovery.set(true);
+
     if (newSession?.user) {
       await fetchSubscription(newSession.user.id);
 
@@ -218,6 +243,90 @@ async function fetchSubscription(userId) {
 }
 
 // ── Public API ───────────────────────────────────────────
+
+// ── Email and password ───────────────────────────────────
+//
+// Supabase reports failures as raw API strings, several of which are either
+// jargon or actively unhelpful in context. These are rewritten into something a
+// person can act on, with anything unrecognised passed through rather than
+// swallowed — a message we have not seen before is more useful than "something
+// went wrong".
+const AUTH_MESSAGES = [
+  [/invalid login credentials/i, 'That email and password combination is not recognised.'],
+  [/email not confirmed/i, 'Check your inbox for a confirmation link before signing in — including your spam folder.'],
+  [/user already registered|already been registered/i, 'There is already an account with that email. Try signing in instead.'],
+  [/password should be at least (\d+)/i, 'Use a longer password — at least $1 characters.'],
+  [/weak password|password is too weak/i, 'That password is too easy to guess. Try a longer one.'],
+  [/unable to validate email|invalid email/i, "That email address doesn't look right."],
+  [/email rate limit|over_email_send_rate_limit/i, 'Too many emails sent just now. Wait a minute and try again.'],
+  [/same.*password|new password should be different/i, 'That is already your password. Choose a different one.'],
+  [/expired|invalid.*token/i, 'That link has expired. Request a new one.'],
+];
+
+/** Turn a Supabase auth error into something worth showing a person. */
+function readableAuthError(error, fallback) {
+  const raw = error?.message ?? '';
+  for (const [pattern, message] of AUTH_MESSAGES) {
+    const match = raw.match(pattern);
+    if (match) return message.replace('$1', match[1] ?? '');
+  }
+  return raw || fallback;
+}
+
+/**
+ * Create an account.
+ *
+ * With email confirmation disabled the response carries a session and the user
+ * is signed in immediately. If it is ever re-enabled, no session comes back and
+ * `needsConfirmation` is true, so the caller can say so rather than appearing
+ * to hang.
+ *
+ * @returns {Promise<{ needsConfirmation: boolean }>}
+ */
+export async function signUpWithEmail(email, password) {
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+  });
+  if (error) throw new Error(readableAuthError(error, 'Could not create that account.'));
+
+  return { needsConfirmation: !data.session };
+}
+
+/** Sign in with an existing email and password. */
+export async function signInWithEmail(email, password) {
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+  if (error) throw new Error(readableAuthError(error, 'Could not sign in.'));
+}
+
+/**
+ * Send a password reset link.
+ *
+ * Deliberately does not reveal whether the address exists — Supabase behaves
+ * the same either way, and telling a caller which addresses are registered
+ * would hand them an account-enumeration tool.
+ */
+export async function requestPasswordReset(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: `${window.location.origin}${window.location.pathname}`,
+  });
+  if (error) throw new Error(readableAuthError(error, 'Could not send the reset email.'));
+}
+
+/** Set a new password. Requires the session a recovery link establishes. */
+export async function updatePassword(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw new Error(readableAuthError(error, 'Could not update your password.'));
+  passwordRecovery.set(false);
+}
+
+/** Abandon a recovery without changing anything. */
+export function cancelPasswordRecovery() {
+  passwordRecovery.set(false);
+}
 
 /** Sign in with Google via Supabase OAuth */
 export async function signInWithGoogle() {

@@ -7,7 +7,8 @@
   import Subscribe from './lib/Subscribe.svelte';
   import Landing from './lib/Landing.svelte';
   import Remote from './lib/Remote.svelte';
-  import { loading, isAuthenticated, isSubscribed, refreshSubscription } from './lib/auth.js';
+  import SetPassword from './lib/SetPassword.svelte';
+  import { loading, isAuthenticated, isSubscribed, refreshSubscription, passwordRecovery } from './lib/auth.js';
   import { parseHash, getTokenFromUrl } from './lib/room.js';
 
   // Route matching uses the hash *path* only — the overlay carries its room id
@@ -17,11 +18,13 @@
   let authLoading = $state(true);
   let authenticated = $state(false);
   let subscribed = $state(false);
+  let recovering = $state(false);
 
   const unsubs = [];
   unsubs.push(loading.subscribe((v) => (authLoading = v)));
   unsubs.push(isAuthenticated.subscribe((v) => (authenticated = v)));
   unsubs.push(isSubscribed.subscribe((v) => (subscribed = v)));
+  unsubs.push(passwordRecovery.subscribe((v) => (recovering = v)));
 
   import { onDestroy } from 'svelte';
   onDestroy(() => unsubs.forEach((u) => u()));
@@ -67,8 +70,14 @@
   }
 </script>
 
+<!-- A reset link takes precedence over every route. It signs the user in, so
+     routing normally would drop them into the controller having never been
+     asked for the new password they came here to set. -->
+{#if recovering}
+  <SetPassword />
+
 <!-- Public routes: always accessible -->
-{#if route === '#/overlay'}
+{:else if route === '#/overlay'}
   <Overlay />
 {:else if route === '#/join'}
   <!-- Co-controller: the full controller on a second device. Public like the
