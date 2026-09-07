@@ -71,6 +71,7 @@
     { id: 'rushing', label: 'Rushing' },
     { id: 'defence', label: 'Defence' },
     { id: 'kicking', label: 'Kicking' },
+    { id: 'special_teams', label: 'Returns' },
     { id: 'penalty', label: 'Penalty' },
   ];
 

@@ -161,6 +161,36 @@ export function detectAlerts(
 			push('big_play', 'SACK!', `${label(primary)} — ${Math.abs(yards)} YDS`, primary, yards);
 			break;
 
+		// Scores that are not the offence's. These are the loudest plays in a
+		// match and the easiest for an operator to be too busy to enter, so they
+		// all get a card.
+		case 'interception_td':
+			push('big_play', 'PICK SIX!', label(primary), primary, yards || undefined);
+			break;
+
+		case 'fumble_return_td':
+			push('big_play', 'SCOOP AND SCORE!', label(primary), primary, yards || undefined);
+			break;
+
+		case 'kick_return_td':
+		case 'punt_return_td':
+			push(
+				'big_play',
+				'RETURN TOUCHDOWN!',
+				`${label(primary)}${yards ? ` — ${yards} YDS` : ''}`,
+				primary,
+				yards || undefined
+			);
+			break;
+
+		case 'blocked_kick_td':
+			push('big_play', 'BLOCKED — TOUCHDOWN!', label(primary), primary, yards || undefined);
+			break;
+
+		case 'safety':
+			push('big_play', 'SAFETY!', label(primary), primary);
+			break;
+
 		// A made field goal is a score, so it always earns a card. `yards` here is
 		// the attempt distance, which is why it reads "38 YARDS" rather than being
 		// passed as a gain.

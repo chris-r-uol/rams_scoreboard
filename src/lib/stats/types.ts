@@ -1,6 +1,6 @@
 // ─── Type definitions for the football stats tracker ───
 
-export type StatCategory = 'passing' | 'rushing' | 'receiving' | 'defence' | 'kicking' | 'penalty' | 'adjustment';
+export type StatCategory = 'passing' | 'rushing' | 'receiving' | 'defence' | 'kicking' | 'special_teams' | 'penalty' | 'adjustment';
 
 export type StatAction =
 	// Passing
@@ -17,6 +17,17 @@ export type StatAction =
 	| 'sack'
 	| 'interception'
 	| 'forced_fumble'
+	// Defensive scores. A pick-six is an interception as well as a touchdown,
+	// so `interception_td` counts as both rather than needing two entries.
+	| 'interception_td'
+	| 'fumble_return_td'
+	| 'safety'
+	// Special teams scores. `yards` carries the return distance where it is
+	// known; there is no full returns record yet, so it is for the log and the
+	// on-air card rather than a per-player average.
+	| 'kick_return_td'
+	| 'punt_return_td'
+	| 'blocked_kick_td'
 	// Kicking. Field goals carry the attempt distance in `yards`; a miss is
 	// recorded too, because a kicker's line is meaningless without the attempts.
 	| 'field_goal_made'
@@ -98,6 +109,14 @@ export interface DefenceStats {
 	sackYards: number;
 	interceptions: number;
 	forcedFumbles: number;
+	/** Interceptions and fumbles returned for a score. */
+	touchdowns: number;
+	safeties: number;
+}
+
+export interface SpecialTeamsStats {
+	/** Kick, punt and blocked-kick returns taken all the way. */
+	touchdowns: number;
 }
 
 export interface PenaltyStats {
@@ -129,6 +148,7 @@ export interface PlayerStats {
 	rushing: RushingStats;
 	receiving: ReceivingStats;
 	defence: DefenceStats;
+	specialTeams: SpecialTeamsStats;
 	kicking: KickingStats;
 	conversions: ConversionStats;
 	penalties: PenaltyStats;
@@ -139,19 +159,28 @@ export interface TeamStats {
 	rushing: RushingStats;
 	receiving: ReceivingStats;
 	defence: DefenceStats;
+	specialTeams: SpecialTeamsStats;
 	kicking: KickingStats;
 	conversions: ConversionStats;
 	penalties: PenaltyStats;
 	totalOffensiveYards: number;
+	/**
+	 * Every touchdown, in any phase — offence, defence and special teams.
+	 *
+	 * Not the same shape as the two totals either side of it, which stay
+	 * strictly offensive: a defensive score is not an offensive play and must
+	 * not inflate yards or play count. A touchdown is a touchdown, though, and
+	 * a panel reading "Total TDs" that quietly omitted the pick-six would be
+	 * wrong in the way nobody checks.
+	 */
 	totalTouchdowns: number;
 	totalOffensivePlays: number;
 	/**
 	 * Points this team has scored, from what has actually been recorded.
 	 *
-	 * Touchdowns, field goals, extra points and two-point conversions. It will
-	 * not match the scoreboard if points were scored by the defence or on a
-	 * return, because the engine has no way to record those yet — so treat a
-	 * gap as "something happened that nobody entered", not as an error.
+	 * Touchdowns in every phase, field goals, extra points, two-point
+	 * conversions and safeties. A gap against the scoreboard now means a play
+	 * nobody entered, rather than something the engine cannot represent.
 	 */
 	totalPoints: number;
 }
