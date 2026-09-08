@@ -13,7 +13,10 @@ export type StatAction =
 	| 'rush_td'
 	// Defence
 	| 'tackle'
+	| 'tackle_assist'
 	| 'tackle_for_loss'
+	| 'pass_defended'
+	| 'fumble_recovery'
 	| 'sack'
 	| 'interception'
 	| 'forced_fumble'
@@ -77,6 +80,15 @@ export interface StatEvent {
 	secondaryPlayerId?: string;
 	yards?: number;
 	points?: number;
+	/**
+	 * Down and distance as the scoreboard read them when this play was entered.
+	 *
+	 * Stamped automatically, like quarter and clock — see gameContext.js. It is
+	 * what makes first downs and third-down conversions derivable without asking
+	 * the operator to record them a second time.
+	 */
+	down?: number;
+	distance?: number;
 	notes?: string;
 	// For manual adjustments
 	statKey?: string;
@@ -97,14 +109,23 @@ export interface RushingStats {
 }
 
 export interface ReceivingStats {
+	/** Passes thrown this player's way, caught or not. */
+	targets: number;
 	receptions: number;
 	yards: number;
 	touchdowns: number;
 }
 
 export interface DefenceStats {
+	/** Solo plus assisted — the combined number a stat sheet leads with. */
 	tackles: number;
+	soloTackles: number;
+	assistedTackles: number;
 	tacklesForLoss: number;
+	passesDefended: number;
+	fumbleRecoveries: number;
+	interceptionYards: number;
+	fumbleReturnYards: number;
 	sacks: number;
 	sackYards: number;
 	interceptions: number;
@@ -117,6 +138,29 @@ export interface DefenceStats {
 export interface SpecialTeamsStats {
 	/** Kick, punt and blocked-kick returns taken all the way. */
 	touchdowns: number;
+	kickReturns: number;
+	kickReturnYards: number;
+	longestKickReturn: number;
+	puntReturns: number;
+	puntReturnYards: number;
+	longestPuntReturn: number;
+}
+
+export interface TurnoverStats {
+	/** Every fumble, whoever ended up with the ball. */
+	fumbles: number;
+	fumblesLost: number;
+}
+
+export interface DownStats {
+	attempts: number;
+	conversions: number;
+}
+
+export interface FirstDownStats {
+	total: number;
+	rushing: number;
+	passing: number;
 }
 
 export interface PenaltyStats {
@@ -151,6 +195,7 @@ export interface PlayerStats {
 	specialTeams: SpecialTeamsStats;
 	kicking: KickingStats;
 	conversions: ConversionStats;
+	turnovers: TurnoverStats;
 	penalties: PenaltyStats;
 }
 
@@ -162,7 +207,22 @@ export interface TeamStats {
 	specialTeams: SpecialTeamsStats;
 	kicking: KickingStats;
 	conversions: ConversionStats;
+	turnovers: TurnoverStats;
 	penalties: PenaltyStats;
+	/**
+	 * Derived from the down and distance stamped on each play.
+	 *
+	 * A play that gained at least what it needed moved the chains. Penalties
+	 * that award a first down are not counted, because no play recorded one —
+	 * so this can read low against an official sheet, never high.
+	 */
+	firstDowns: FirstDownStats;
+	thirdDowns: DownStats;
+	fourthDowns: DownStats;
+	/** Interceptions and fumbles this team recovered. */
+	takeaways: number;
+	/** Interceptions thrown and fumbles lost. */
+	giveaways: number;
 	totalOffensiveYards: number;
 	/**
 	 * Every touchdown, in any phase — offence, defence and special teams.

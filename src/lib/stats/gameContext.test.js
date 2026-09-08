@@ -105,3 +105,37 @@ describe('teamConfigFrom', () => {
     expect(teamConfigFrom({ homeName: 'X', homeLogo: '' }).logoDataUrl).toBeUndefined();
   });
 });
+
+describe('down and distance', () => {
+  it('stamps them in football, so first downs need no separate entry', () => {
+    const context = gameContextFrom({ sport: 'american-football', quarter: 2, down: 3, distance: 7 });
+    expect(context.down).toBe(3);
+    expect(context.distance).toBe(7);
+  });
+
+  it('leaves them off every other sport', () => {
+    // Downs do not exist in hockey. Stamping "3rd & 7" on a save would be
+    // worse than leaving the fields blank.
+    for (const sport of ['ice-hockey', 'soccer', 'basketball', 'cricket', 'mtg']) {
+      const context = gameContextFrom({ sport, down: 3, distance: 7 });
+      expect(context.down).toBeUndefined();
+      expect(context.distance).toBeUndefined();
+    }
+  });
+
+  it('omits them when the scoreboard has not set them', () => {
+    const context = gameContextFrom({ sport: 'american-football', quarter: 1 });
+    expect('down' in context).toBe(false);
+  });
+
+  it('still lets an existing value on the event win', () => {
+    // Same rule as the clock: a correction entered after the fact must not be
+    // relabelled with the situation as it reads now.
+    const stamped = withGameContext(
+      { id: 'e1', down: 1, distance: 10 },
+      { sport: 'american-football', down: 4, distance: 2 },
+    );
+    expect(stamped.down).toBe(1);
+    expect(stamped.distance).toBe(10);
+  });
+});

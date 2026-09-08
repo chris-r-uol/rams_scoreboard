@@ -44,3 +44,34 @@ export function recalculateDrives(
 		completedDrives: completedDrives.map((d) => recalculateDrive(d, eventsById))
 	};
 }
+
+/**
+ * Time of possession, from the drives themselves.
+ *
+ * Wall-clock elapsed between opening a drive and closing it, which for a
+ * live-operated game is the time the offence was actually on the field. It
+ * needs no extra entry at all, but it does depend on drives being opened and
+ * closed as they happen — a drive left open at half time will read long.
+ *
+ * @param now used for a drive still in progress
+ */
+export function possessionMs(
+	currentDrive: Drive | null,
+	completedDrives: Drive[],
+	now: number = Date.now()
+): number {
+	let total = 0;
+	for (const d of completedDrives) {
+		total += Math.max(0, (d.endTime ?? d.startTime) - d.startTime);
+	}
+	if (currentDrive) total += Math.max(0, now - currentDrive.startTime);
+	return total;
+}
+
+/** Time of possession as mm:ss. */
+export function formatPossession(ms: number): string {
+	const total = Math.floor(ms / 1000);
+	const m = Math.floor(total / 60);
+	const s = total % 60;
+	return `${m}:${String(s).padStart(2, '0')}`;
+}

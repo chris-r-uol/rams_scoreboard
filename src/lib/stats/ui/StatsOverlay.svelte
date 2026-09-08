@@ -62,6 +62,24 @@ function pct(a: number, b: number): string {
 			</div>
 		</div>
 
+		<!-- Situational. First downs and third-down rate are what a commentator
+		     reaches for, so they sit with the offensive lines rather than behind
+		     a separate panel. -->
+		{#if ts.firstDowns.total > 0 || ts.thirdDowns.attempts > 0}
+		<div style="display:flex;align-items:baseline;gap:12px;">
+			<span style="width:44px;font-size:0.65rem;opacity:0.65;text-transform:uppercase;letter-spacing:0.1em;flex-shrink:0;">SIT</span>
+			<div style="display:flex;gap:16px;font-size:0.82rem;font-weight:600;font-variant-numeric:tabular-nums;flex-wrap:wrap;">
+				<span>{ts.firstDowns.total} 1ST DOWNS</span>
+				{#if ts.thirdDowns.attempts > 0}
+					<span>3RD {ts.thirdDowns.conversions}/{ts.thirdDowns.attempts}{pct(ts.thirdDowns.conversions, ts.thirdDowns.attempts)}</span>
+				{/if}
+				{#if ts.takeaways > 0 || ts.giveaways > 0}
+					<span style="opacity:0.75;">TO {ts.takeaways > ts.giveaways ? '+' : ''}{ts.takeaways - ts.giveaways}</span>
+				{/if}
+			</div>
+		</div>
+		{/if}
+
 		<!-- Scores the offence had nothing to do with. Rare, so only ever shown
 		     when one has actually happened. -->
 		{#if ts.defence.touchdowns > 0 || ts.specialTeams.touchdowns > 0 || ts.defence.safeties > 0}

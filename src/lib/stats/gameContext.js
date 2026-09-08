@@ -44,8 +44,14 @@ function periodFor(state) {
  * sport is chosen carries no false precision, and `StatEvent` treats both as
  * optional precisely so that is representable.
  *
+ * Down and distance come too, but only in American football — the concept does
+ * not exist in the other sports, and stamping a hockey stat with "1st & 10"
+ * would be worse than leaving it blank. They are what makes first downs and
+ * third-down conversions derivable without asking the operator to record the
+ * same play twice.
+ *
  * @param {object} state scoreboard state
- * @returns {{ quarter?: string, gameClock?: string }}
+ * @returns {{ quarter?: string, gameClock?: string, down?: number, distance?: number }}
  */
 export function gameContextFrom(state) {
   if (!state?.sport) return {};
@@ -57,6 +63,11 @@ export function gameContextFrom(state) {
 
   if (typeof state.gameClockSeconds === 'number') {
     context.gameClock = formatGameClock(state.gameClockSeconds);
+  }
+
+  if (state.sport === 'american-football') {
+    if (typeof state.down === 'number') context.down = state.down;
+    if (typeof state.distance === 'number') context.distance = state.distance;
   }
 
   return context;

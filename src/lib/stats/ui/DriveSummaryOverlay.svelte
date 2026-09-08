@@ -1,11 +1,32 @@
 <script lang="ts">
 	import type { GameState, Drive, DriveResult } from '../types';
+	import { possessionMs, formatPossession } from '../drives';
 
-	let { state }: { state: GameState } = $props();
+	/**
+	 * Named `game`, not `state`, unlike the other overlays.
+	 *
+	 * This one needs a ticking clock, and `$state(...)` inside a component with
+	 * a prop called `state` is parsed as auto-subscribing to a store of that
+	 * name — the rune never runs, and the component dies at runtime with
+	 * `store_invalid_shape` while the build passes happily.
+	 */
+	let { game }: { game: GameState } = $props();
 
-	const team = $derived(state.team);
-	const drive = $derived(state.currentDrive);
-	const completed = $derived(state.completedDrives.slice(-3).reverse());
+	const team = $derived(game.team);
+	// Ticked rather than derived from Date.now(): a clock that only updates when
+	// something else changes is not a clock. Only runs while a drive is open.
+	let now = $state(Date.now());
+	$effect(() => {
+		if (!game.currentDrive) return;
+		const id = setInterval(() => (now = Date.now()), 1000);
+		return () => clearInterval(id);
+	});
+
+	const possession = $derived(
+		formatPossession(possessionMs(game.currentDrive, game.completedDrives, now))
+	);
+	const drive = $derived(game.currentDrive);
+	const completed = $derived(game.completedDrives.slice(-3).reverse());
 
 	const RESULT_LABEL: Record<DriveResult, string> = {
 		touchdown: 'TD',
@@ -45,7 +66,12 @@
 			<img src={team.logoDataUrl} alt={team.abbreviation} style="height:32px;width:32px;object-fit:contain;flex-shrink:0;" />
 		{/if}
 		<div style="font-weight:900;font-size:0.85rem;letter-spacing:0.08em;">DRIVE SUMMARY</div>
-		<div style="font-size:0.65rem;opacity:0.55;margin-left:auto;letter-spacing:0.1em;">{team.abbreviation}</div>
+		<!-- Time of possession belongs on the drive panel: it is the sum of
+		     exactly what this panel is showing. -->
+		<div style="font-size:0.65rem;opacity:0.55;margin-left:auto;letter-spacing:0.1em;text-align:right;">
+			<div>{team.abbreviation}</div>
+			<div style="font-variant-numeric:tabular-nums;">TOP {possession}</div>
+		</div>
 	</div>
 
 	<!-- Current drive -->

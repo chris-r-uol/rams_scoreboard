@@ -137,7 +137,7 @@
     {:else if statsMode === 'run_pass_chart'}
       <RunPassChartOverlay state={game} />
     {:else if statsMode === 'drive_summary'}
-      <DriveSummaryOverlay state={game} />
+      <DriveSummaryOverlay {game} />
     {/if}
   </div>
 {/if}
